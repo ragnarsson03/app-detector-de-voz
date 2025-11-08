@@ -12,10 +12,6 @@ export default function Home() {
       
       {/* Componente Uploader creado en el Paso 2 */}
       <Uploader />
-
-      <footer className="mt-12 text-sm text-gray-500">
-        Usando Next.js, React y TypeScript
-      </footer>
     </main>
   );
 }

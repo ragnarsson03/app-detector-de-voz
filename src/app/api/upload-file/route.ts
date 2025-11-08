@@ -2,6 +2,8 @@
 
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase-server';
+import OpenAI from 'openai';
+const openai = new OpenAI(); // Esto usa automáticamente la variable de entorno
 
 // POST handler para recibir el archivo
 export async function POST(request: Request) {

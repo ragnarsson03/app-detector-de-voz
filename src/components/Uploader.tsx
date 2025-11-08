@@ -52,11 +52,26 @@ export const Uploader = () => {
         throw new Error(result.error || 'Fallo desconocido en la subida.');
       }
       
-      // Éxito: El archivo está en Supabase. Ahora debemos iniciar la transcripción.
-      setMessage(`✅ Archivo subido con éxito. Iniciando transcripción...`);
-      console.log('Ruta del archivo subido en Supabase:', result.filePath);
+      // Éxito: El archivo está en Supabase. Ahora iniciamos la transcripción.
+      setMessage(`✅ Archivo subido. Transcribiendo...`);
       
-      // TODO: Aquí vendrá el código para llamar a la API de Google Cloud o a tu host de Whisper
+      // Llama a la API de transcripción con la ruta del archivo
+      const transcribeResponse = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filePath: result.filePath }),
+      });
+
+      const transcribeResult = await transcribeResponse.json();
+
+      if (!transcribeResponse.ok) {
+        throw new Error(transcribeResult.error || 'Fallo en la transcripción.');
+      }
+
+      // Muestra la transcripción final
+      setMessage(`Transcripción: ${transcribeResult.transcription}`);
       
       setFile(null); // Limpiamos el estado
 
