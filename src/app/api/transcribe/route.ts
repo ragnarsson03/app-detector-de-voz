@@ -46,13 +46,16 @@ export async function POST(request: Request) {
     let result;
     try {
       result = await hf.automaticSpeechRecognition({
-        model: 'openai/whisper-large-v3',
+        model: 'facebook/wav2vec2-base-960h', // Modelo Whisper en español 
         data: audioArrayBuffer, // Usar el ArrayBuffer
       });
     } catch (inferenceError) {
-        console.error('Error de la API de Hugging Face:', inferenceError);
-        const errorMessage = (inferenceError instanceof Error) ? inferenceError.message : 'Error desconocido de Hugging Face.';
-        return NextResponse.json({ error: 'Fallo la inferencia del modelo de transcripción.', details: errorMessage }, { status: 500 });
+        const fullErrorDetails = JSON.stringify(inferenceError, Object.getOwnPropertyNames(inferenceError));
+        console.error('Error detallado de Hugging Face:', fullErrorDetails);
+        return NextResponse.json({
+            error: 'Fallo la inferencia del modelo de transcripción.',
+            details: fullErrorDetails // Devolvemos el error completo para debug
+        }, { status: 500 });
     }
     
     console.log('Transcripción recibida de Hugging Face.');
