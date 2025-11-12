@@ -2,25 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase-server';
-import { HfInference } from '@huggingface/inference';
-
-// Inicializa el cliente de Hugging Face con tu token
-const hfToken = process.env.HF_TOKEN;
-let hf: HfInference | null = null;
-
-if (hfToken) {
-  hf = new HfInference(hfToken);
-} else {
-  console.error('La variable de entorno HF_TOKEN no está configurada. El servicio de transcripción estará deshabilitado.');
-}
-
 export async function POST(request: Request) {
-  // 1. Validar la configuración del servicio
-  if (!hf) {
-    console.error('Intento de usar la API de transcripción sin HF_TOKEN configurado.');
-    return NextResponse.json({ error: 'El servicio de transcripción no está configurado.' }, { status: 500 });
-  }
-
   const { filePath } = await request.json();
 
   if (!filePath) {
@@ -43,22 +25,27 @@ export async function POST(request: Request) {
     // 3. Enviar el audio a la API de Hugging Face para transcribir
     const audioArrayBuffer = await fileData.arrayBuffer(); // Convertir Blob a ArrayBuffer
     console.log('Enviando archivo a Hugging Face para transcripción...');
-    let result;
-    try {
-      result = await hf.automaticSpeechRecognition({
-        model: 'facebook/wav2vec2-base-960h', // Modelo Whisper en español 
-        data: audioArrayBuffer, // Usar el ArrayBuffer
-      });
-    } catch (inferenceError) {
-        const fullErrorDetails = JSON.stringify(inferenceError, Object.getOwnPropertyNames(inferenceError));
-        console.error('Error detallado de Hugging Face:', fullErrorDetails);
+
+    const formData = new FormData();
+    formData.append('file', new Blob([audioArrayBuffer]));
+
+    const response = await fetch('https://huggingface.co/spaces/openai/whisper-large-v3/api/predict', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error de la API de Hugging Face:', response.status, errorText);
         return NextResponse.json({
-            error: 'Fallo la inferencia del modelo de transcripción.',
-            details: fullErrorDetails // Devolvemos el error completo para debug
-        }, { status: 500 });
+            error: 'Fallo la llamada a la API de transcripción de Hugging Face.',
+            details: errorText
+        }, { status: response.status });
     }
-    
-    console.log('Transcripción recibida de Hugging Face.');
+
+    const result = await response.json();
+    console.log('Transcripción recibida de Hugging Face:', result);
+
 
     // 4. Eliminar el archivo de Supabase después de la transcripción
     console.log(`Eliminando archivo temporal: ${filePath}`);
@@ -73,7 +60,12 @@ export async function POST(request: Request) {
     // 5. Devolver la transcripción
     return NextResponse.json({
       message: 'Transcripción completada.',
-      transcription: result.text,
+      // La estructura de la respuesta de la API de predict puede variar.
+      // A menudo, para los espacios de Gradio, el resultado está en un array `data`.
+      // Si la salida es un solo campo de texto, estará en `result.data[0]`.
+      transcription: result.data && Array.isArray(result.data) && result.data.length > 0
+        ? result.data[0]
+        : 'No se pudo extraer la transcripción del resultado.',
     });
 
   } catch (error) {
