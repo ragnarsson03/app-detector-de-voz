@@ -23,15 +23,15 @@ export async function POST(request: Request) {
   const uniqueFileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExtension}`;
 
   try {
-    // Convierte el archivo a Buffer para subirlo
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    // Convierte el archivo a ArrayBuffer para subirlo
+    const fileBody = await file.arrayBuffer();
 
     // 3. Subir a Supabase Storage
     const { data, error } = await supabaseServer.storage
-      .from('audio-bucket') // Cambia 'audio-bucket' por el nombre de tu bucket en Supabase
-      .upload(uniqueFileName, fileBuffer, {
+      .from('audio-bucket') // Asegúrate de que este bucket exista y tenga permisos de escritura
+      .upload(uniqueFileName, fileBody, { // Pasamos el ArrayBuffer directamente
         contentType: file.type,
-        upsert: false, // No sobreescribir si ya existe
+        upsert: false,
       });
 
     if (error) {

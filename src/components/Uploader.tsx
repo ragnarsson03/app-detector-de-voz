@@ -11,6 +11,7 @@ export const Uploader = () => {
   // Estado para manejar el estado de la carga.
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState('');
+  const [transcription, setTranscription] = useState('');
 
   // 1. Maneja la selección del archivo.
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -19,9 +20,11 @@ export const Uploader = () => {
       const selectedFile = event.target.files[0];
       setFile(selectedFile);
       setMessage(`Archivo seleccionado: ${selectedFile.name}`);
+      setTranscription(''); // Limpiar transcripción anterior al seleccionar nuevo archivo
     } else {
       setFile(null);
       setMessage('');
+      setTranscription('');
     }
   };
 
@@ -71,7 +74,9 @@ export const Uploader = () => {
       }
 
       // Muestra la transcripción final
-      setMessage(`Transcripción: ${transcribeResult.transcription}`);
+      // Muestra la transcripción final
+      setTranscription(transcribeResult.transcription);
+      setMessage('Transcripción completada.');
       
       setFile(null); // Limpiamos el estado
 
@@ -82,6 +87,28 @@ export const Uploader = () => {
       setIsUploading(false);
     }
   }, [file]);
+
+  // 3. Maneja la descarga del archivo de texto
+  const handleDownload = () => {
+    if (!transcription) return;
+
+    // Crear un "blob" (Binary Large Object) con el texto
+    const blob = new Blob([transcription], { type: 'text/plain' });
+    
+    // Crear una URL temporal para el blob
+    const url = URL.createObjectURL(blob);
+    
+    // Crear un enlace <a> invisible para iniciar la descarga
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'transcripcion.txt'; // Nombre del archivo
+    document.body.appendChild(a); // Añadirlo al DOM
+    a.click(); // Simular clic
+    
+    // Limpiar
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="p-8 max-w-lg mx-auto bg-white shadow-lg rounded-xl">
@@ -117,10 +144,28 @@ export const Uploader = () => {
       </button>
 
       {/* Área de mensajes de estado */}
+      {/* Área de mensajes de estado */}
       {message && (
         <p className={`mt-4 text-sm p-3 rounded ${message.startsWith('❌') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
           {message}
         </p>
+      )}
+
+      {/* Muestra la transcripción y el botón de descarga */}
+      {transcription && (
+        <div className="mt-4">
+          <textarea
+            readOnly
+            value={transcription}
+            className="w-full h-40 p-2 border border-gray-300 rounded bg-gray-50"
+          />
+          <button
+            onClick={handleDownload}
+            className="w-full mt-2 py-2 px-4 rounded-lg text-white font-semibold transition-colors bg-blue-600 hover:bg-blue-700"
+          >
+            Descargar Transcripción (.txt)
+          </button>
+        </div>
       )}
     </div>
   );
