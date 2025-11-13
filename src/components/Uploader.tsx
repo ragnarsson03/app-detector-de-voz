@@ -11,57 +11,62 @@ export const Uploader = () => {
   // Estado para manejar el estado de la carga.
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState('');
+  const [transcription, setTranscription] = useState('');
 
   // 1. Maneja la selección del archivo.
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    // Asegura que hay archivos y solo toma el primero.
     if (event.target.files && event.target.files.length > 0) {
       const selectedFile = event.target.files[0];
       setFile(selectedFile);
       setMessage(`Archivo seleccionado: ${selectedFile.name}`);
+      setTranscription(''); // Limpiar transcripción al seleccionar nuevo archivo
     } else {
       setFile(null);
       setMessage('');
     }
   };
 
-  // 2. Maneja el proceso de subida (la lógica de Supabase irá aquí).
+  // 2. Maneja el proceso de subida y transcripción.
   const handleUpload = useCallback(async () => {
     if (!file) {
-      setMessage('Por favor, selecciona un archivo de audio o video primero.');
+      setMessage('Por favor, selecciona un archivo de audio primero.');
       return;
     }
 
     setIsUploading(true);
     setMessage('Subiendo archivo...');
+    setTranscription('');
 
     try {
-      // Usamos FormData para enviar el archivo al endpoint
+      // --- Paso 1: Subir el archivo ---
       const formData = new FormData();
       formData.append('file', file);
       
-      // Llama a la API Route de Next.js
-      const response = await fetch('/api/upload-file', {
+      const uploadResponse = await fetch('/api/upload-file', {
         method: 'POST',
-        body: formData, // FormData envía el archivo
+        body: formData,
       });
 
-      const result = await response.json();
+      const uploadResult = await uploadResponse.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Fallo desconocido en la subida.');
+      if (!uploadResponse.ok) {
+        throw new Error(uploadResult.error || 'Fallo desconocido en la subida.');
       }
       
-      // Éxito: El archivo está en Supabase. Ahora iniciamos la transcripción.
+      // --- Paso 2: Transcribir el archivo ---
       setMessage(`✅ Archivo subido. Transcribiendo...`);
+      const { publicUrl } = uploadResult;
+
+      if (!publicUrl) {
+        throw new Error('La API de subida no devolvió una URL pública.');
+      }
       
-      // Llama a la API de transcripción con la ruta del archivo
       const transcribeResponse = await fetch('/api/transcribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ filePath: result.filePath }),
+        body: JSON.stringify({ publicUrl }), // Enviamos la URL pública
       });
 
       const transcribeResult = await transcribeResponse.json();
@@ -70,14 +75,14 @@ export const Uploader = () => {
         throw new Error(transcribeResult.error || 'Fallo en la transcripción.');
       }
 
-      // Muestra la transcripción final
-      setMessage(`Transcripción: ${transcribeResult.transcription}`);
-      
-      setFile(null); // Limpiamos el estado
+      // --- Paso 3: Mostrar el resultado ---
+      setTranscription(transcribeResult.transcription);
+      setMessage('¡Transcripción completada!');
+      setFile(null);
 
     } catch (error) {
-      console.error('Error durante la subida:', error);
-      setMessage(`❌ Error al subir: ${(error as Error).message}`);
+      console.error('Error durante el proceso:', error);
+      setMessage(`❌ Error: ${(error as Error).message}`);
     } finally {
       setIsUploading(false);
     }
@@ -88,11 +93,10 @@ export const Uploader = () => {
       <h2 className="text-2xl font-bold mb-4 text-gray-800">Cargar Archivo de Voz</h2>
       
       <div className="mb-4">
-        {/* Input de tipo file para seleccionar el archivo */}
         <input
           type="file"
           id="audio-file-input"
-          accept="audio/*,video/*" // Acepta archivos de audio y video
+          accept="audio/*,video/*"
           onChange={handleFileChange}
           className="block w-full text-sm text-gray-500
             file:mr-4 file:py-2 file:px-4
@@ -106,7 +110,7 @@ export const Uploader = () => {
 
       <button
         onClick={handleUpload}
-        disabled={!file || isUploading} // Deshabilitado si no hay archivo o si ya está subiendo
+        disabled={!file || isUploading}
         className={`w-full py-2 px-4 rounded-lg text-white font-semibold transition-colors 
           ${!file || isUploading
             ? 'bg-gray-400 cursor-not-allowed'
@@ -116,11 +120,17 @@ export const Uploader = () => {
         {isUploading ? 'Procesando...' : 'Subir y Transcribir'}
       </button>
 
-      {/* Área de mensajes de estado */}
       {message && (
-        <p className={`mt-4 text-sm p-3 rounded ${message.startsWith('❌') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+        <p className={`mt-4 text-sm text-center p-3 rounded ${message.startsWith('❌') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
           {message}
         </p>
+      )}
+
+      {transcription && (
+        <div className="mt-6 p-4 border rounded-md bg-gray-50">
+          <h3 className="font-semibold text-gray-800 mb-2">Transcripción:</h3>
+          <p className="text-gray-700 whitespace-pre-wrap">{transcription}</p>
+        </div>
       )}
     </div>
   );

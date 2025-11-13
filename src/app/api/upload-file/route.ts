@@ -35,14 +35,28 @@ export async function POST(request: Request) {
       });
 
     if (error) {
-      console.error('Error de Supabase:', error);
+      console.error('Error al subir a Supabase Storage:', error);
       return NextResponse.json({ error: 'Error al subir a Storage.' }, { status: 500 });
     }
 
-    // 4. Devolver la ubicación del archivo
+    console.log('Archivo subido con éxito a Supabase. Path:', data.path);
+
+    // 4. Obtener la URL pública del archivo subido
+    const { data: publicUrlData } = supabaseServer.storage
+      .from('audio-bucket')
+      .getPublicUrl(data.path);
+
+    if (!publicUrlData.publicUrl) {
+      console.error('Error: No se pudo obtener la URL pública. ¿El bucket "audio-bucket" es público?');
+      return NextResponse.json({ error: 'No se pudo obtener la URL pública.' }, { status: 500 });
+    }
+    
+    console.log('URL pública obtenida:', publicUrlData.publicUrl);
+
+    // 5. Devolver la URL pública
     return NextResponse.json({
       message: 'Archivo subido con éxito.',
-      filePath: data.path, // Esto será importante para el paso de transcripción
+      publicUrl: publicUrlData.publicUrl,
     });
     
   } catch (error) {
