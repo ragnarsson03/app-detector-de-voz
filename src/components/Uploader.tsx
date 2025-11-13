@@ -60,6 +60,7 @@ export const Uploader = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_APP_SECRET_KEY}`,
         },
         body: JSON.stringify({ filePath: result.filePath }),
       });
