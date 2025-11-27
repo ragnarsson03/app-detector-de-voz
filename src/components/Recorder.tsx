@@ -1,15 +1,19 @@
 'use client'; 
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, Dispatch, SetStateAction } from 'react';
 // Importación con extensión explícita, a veces más robusta en ciertos entornos
-import { handleProcessAudio } from '@/lib/transcription-utils'; 
+import { handleProcessAudio } from '@/lib/transcription-utils';
 
-export const Recorder = () => {
+// Definimos la interfaz para las props del componente
+interface RecorderProps {
+    setTranscription: Dispatch<SetStateAction<string>>;
+}
+
+export const Recorder = ({ setTranscription }: RecorderProps) => {
     // Estados del componente
     const [isRecording, setIsRecording] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [message, setMessage] = useState('Presiona el micrófono para grabar.');
-    const [transcriptionText, setTranscriptionText] = useState('');
     
     // Referencias a objetos del navegador para la grabación
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -18,7 +22,7 @@ export const Recorder = () => {
     // Función para iniciar la grabación
     const startRecording = useCallback(async () => {
         if (isProcessing) return; // Evitar iniciar mientras procesa
-        setTranscriptionText('');
+        setTranscription(''); // Limpia la transcripción anterior en el componente padre
         setMessage('Solicitando acceso al micrófono...');
         
         try {
@@ -66,9 +70,9 @@ export const Recorder = () => {
             // Nota: Aquí se asume que 'handleProcessAudio' está implementado en '@/lib/transcription-utils'
             // y que maneja la lógica de la API de Gemini (u otra IA)
             // Para el propósito de esta revisión de UI, asumimos que funciona.
-            const transcription = await handleProcessAudio(audioBlob, 'audio.webm'); 
+            const transcription = await handleProcessAudio(audioBlob, 'audio.webm');
 
-            setTranscriptionText(transcription);
+            setTranscription(transcription); // Actualiza el estado en el componente padre
             setMessage('✅ Transcripción completada.');
 
         } catch (error) {
@@ -76,20 +80,6 @@ export const Recorder = () => {
         } finally {
             setIsProcessing(false);
         }
-    };
-
-    // Función de descarga
-    const handleDownload = () => {
-        if (!transcriptionText) return;
-        const blob = new Blob([transcriptionText], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `transcripcion_microfono_${Date.now()}.txt`; 
-        document.body.appendChild(a); 
-        a.click(); 
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     };
 
     // Icono a usar
@@ -101,45 +91,28 @@ export const Recorder = () => {
 
     return (
         <div className="w-full text-white font-sans flex flex-col items-center">
-            <h3 className="text-2xl font-bold mb-4 text-gray-200 text-center">Grabación Directa del Micrófono</h3>
+            <h3 className="text-2xl font-bold mb-4 text-cyan-200 text-center" style={{ textShadow: '0 0 8px rgba(0, 246, 255, 0.5)' }}>Grabación Directa</h3>
 
             {/* Botón de control de grabación */}
             <div className="flex justify-center mb-6">
                 <button
                     onClick={isRecording ? stopRecording : startRecording}
                     disabled={isProcessing}
-                    className={`w-24 h-24 rounded-full text-white text-3xl transition-all shadow-lg 
-                        ${isProcessing ? 'bg-gray-500 cursor-not-allowed opacity-70' : 
-                          isRecording ? 'bg-red-600 hover:bg-red-700 ring-4 ring-red-400/50' : 'bg-green-600 hover:bg-green-700 ring-4 ring-green-400/50'}`}
+                    className={`w-24 h-24 rounded-full text-3xl transition-all shadow-lg transform hover:scale-110 flex items-center justify-center
+                        ${isProcessing ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed border border-gray-600' :
+                          isRecording ? 'bg-red-500/90 text-white hover:bg-red-600 ring-4 ring-red-400/50 animate-pulse' :
+                          'bg-transparent border-2 border-cyan-400/60 text-cyan-300 hover:bg-cyan-900/40 hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(0,246,255,0.4)]'}`}
                 >
                     {Icon}
                 </button>
             </div>
 
             {/* Área de mensajes de estado */}
-            <p className={`text-sm p-3 rounded-lg font-medium text-center whitespace-pre-wrap w-full 
-              ${message.includes('❌') ? 'bg-red-900 text-red-300' : 'bg-blue-900 text-blue-300'}`}>
+            <p className={`text-sm p-3 rounded-lg font-medium text-center whitespace-pre-wrap w-full
+              ${message.includes('❌') ? 'bg-red-900/50 text-red-300' : 'bg-cyan-900/50 text-cyan-200'}`}>
                 {isProcessing ? 'Procesando en el servidor...' : message}
             </p>
 
-            {/* Área de Transcripción Final */}
-            {transcriptionText && (
-                <div className="mt-8 w-full">
-                    <h3 className="text-lg font-bold mb-3 text-emerald-400">Transcripción:</h3>
-                    <textarea
-                        readOnly
-                        value={transcriptionText}
-                        className="w-full h-40 p-4 text-gray-100 bg-gray-800 border border-gray-700 rounded-lg overflow-y-auto shadow-inner resize-none"
-                        style={{ outline: 'none' }}
-                    />
-                    <button
-                        onClick={handleDownload}
-                        className="w-full mt-3 py-2 px-6 rounded-lg font-semibold transition-colors bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                        <i className="fas fa-download mr-2"></i> Descargar Transcripción (.txt)
-                    </button>
-                </div>
-            )}
         </div>
     );
 };

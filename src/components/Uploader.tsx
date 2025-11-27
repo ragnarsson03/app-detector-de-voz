@@ -2,18 +2,22 @@
 
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, Dispatch, SetStateAction } from 'react';
+
+// Definimos la interfaz para las props del componente
+interface UploaderProps {
+    setTranscription: Dispatch<SetStateAction<string>>;
+}
 
 // Tipos para un manejo de estado más robusto
 type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
 
 // Componente para subir y transcribir archivos de audio
-export const Uploader = () => {
+export const Uploader = ({ setTranscription }: UploaderProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
-  const [transcription, setTranscription] = useState('');
-
+  
   const isProcessing = useMemo(() => status === 'uploading' || status === 'transcribing', [status]);
 
   // Maneja la selección de un nuevo archivo
@@ -23,7 +27,7 @@ export const Uploader = () => {
       setFile(selectedFile);
       setStatus('idle');
       setStatusMessage(`Archivo listo: ${selectedFile.name}`);
-      setTranscription(''); // Limpia la transcripción anterior
+      setTranscription(''); // Limpia la transcripción anterior en el componente padre
     }
   };
 
@@ -64,7 +68,7 @@ export const Uploader = () => {
       // --- 3. Éxito ---
       setStatus('success');
       setStatusMessage('¡Transcripción completada con éxito!');
-      setTranscription(transcribeResult.transcription);
+      setTranscription(transcribeResult.transcription); // Actualiza el estado en el componente padre
       setFile(null); // Limpia el input de archivo
 
     } catch (error) {
@@ -72,7 +76,7 @@ export const Uploader = () => {
       setStatus('error');
       setStatusMessage(`❌ Error: ${(error as Error).message}`);
     }
-  }, [file]);
+  }, [file, setTranscription]);
 
   // Determina el texto del botón basado en el estado
   const buttonText = useMemo(() => {
@@ -85,7 +89,7 @@ export const Uploader = () => {
 
   return (
     <div className="w-full">
-      <h3 className="text-2xl font-bold mb-6 text-gray-200 text-center">Cargar Archivo</h3>
+      <h3 className="text-2xl font-bold mb-6 text-cyan-200 text-center" style={{ textShadow: '0 0 8px rgba(0, 246, 255, 0.5)' }}>Cargar Archivo</h3>
       
       <div className="mb-5">
         <label htmlFor="audio-file-input" className="sr-only">Seleccionar archivo</label>
@@ -95,12 +99,12 @@ export const Uploader = () => {
           accept="audio/*,video/*"
           onChange={handleFileChange}
           disabled={isProcessing}
-          className="block w-full text-sm text-slate-500
+          className="block w-full text-sm text-gray-400 cursor-pointer
             file:mr-4 file:py-2 file:px-4
-            file:rounded-full file:border-0
+            file:rounded-lg file:border file:border-cyan-400/50
             file:text-sm file:font-semibold
-            file:bg-violet-50 file:text-violet-700
-            hover:file:bg-violet-100
+            file:bg-transparent file:text-cyan-300
+            hover:file:bg-cyan-900/40 hover:file:border-cyan-400
             disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
@@ -108,28 +112,22 @@ export const Uploader = () => {
       <button
         onClick={handleSubmit}
         disabled={!file || isProcessing}
-        className={`w-full py-3 px-4 rounded-lg text-white font-semibold transition-all duration-300 ease-in-out
+        className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 ease-in-out border
           ${!file || isProcessing
-            ? 'bg-gray-400 cursor-not-allowed'
-            : 'bg-green-600 hover:bg-green-700 transform hover:-translate-y-1'
+            ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed border-gray-600'
+            : 'text-cyan-300 border-cyan-400/50 hover:bg-cyan-900/40 hover:text-white hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(0,246,255,0.3)] transform hover:-translate-y-1'
           }`}
       >
         {buttonText}
       </button>
 
       {statusMessage && (
-        <div className={`mt-4 text-center p-3 rounded-lg text-sm
-          ${status === 'error' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+        <div className={`mt-4 text-center p-3 rounded-lg text-sm font-medium
+          ${status === 'error' ? 'bg-red-900/50 text-red-300' : 'bg-cyan-900/50 text-cyan-200'}`}>
           <p>{statusMessage}</p>
         </div>
       )}
 
-      {transcription && (
-        <div className="mt-6 p-4 border rounded-md bg-gray-50 text-left">
-          <h3 className="font-semibold text-gray-800 mb-2">Transcripción:</h3>
-          <p className="text-gray-700 whitespace-pre-wrap font-mono">{transcription}</p>
-        </div>
-      )}
     </div>
   );
 };
