@@ -93,7 +93,7 @@ export const Recorder = () => {
 
 
     return (
-        <div className="p-8 max-w-2xl mx-auto bg-gray-900 shadow-xl rounded-xl text-white font-sans">
+        <div className="w-full text-white font-sans">
             <h2 className="text-2xl font-bold mb-4 text-gray-200">Grabación Directa del Micrófono</h2>
 
             {/* Botón de control de grabación */}
