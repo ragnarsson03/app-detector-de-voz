@@ -1,135 +1,133 @@
 // src/components/Uploader.tsx
 
-'use client'; // Indica que es un componente de cliente en Next.js App Router
+'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
-// Define el componente principal para subir el archivo.
+// Tipos para un manejo de estado más robusto
+type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
+
+// Componente para subir y transcribir archivos de audio
 export const Uploader = () => {
-  // Estado para almacenar el archivo seleccionado por el usuario.
   const [file, setFile] = useState<File | null>(null);
-  // Estado para manejar el estado de la carga.
-  const [isUploading, setIsUploading] = useState(false);
-  const [message, setMessage] = useState('');
+  const [status, setStatus] = useState<UploadStatus>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
   const [transcription, setTranscription] = useState('');
 
-  // 1. Maneja la selección del archivo.
+  const isProcessing = useMemo(() => status === 'uploading' || status === 'transcribing', [status]);
+
+  // Maneja la selección de un nuevo archivo
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files.length > 0) {
-      const selectedFile = event.target.files[0];
+    const selectedFile = event.target.files?.[0];
+    if (selectedFile) {
       setFile(selectedFile);
-      setMessage(`Archivo seleccionado: ${selectedFile.name}`);
-      setTranscription(''); // Limpiar transcripción al seleccionar nuevo archivo
-    } else {
-      setFile(null);
-      setMessage('');
+      setStatus('idle');
+      setStatusMessage(`Archivo listo: ${selectedFile.name}`);
+      setTranscription(''); // Limpia la transcripción anterior
     }
   };
 
-  // 2. Maneja el proceso de subida y transcripción.
-  const handleUpload = useCallback(async () => {
+  // Orquesta el proceso de subida y transcripción
+  const handleSubmit = useCallback(async () => {
     if (!file) {
-      setMessage('Por favor, selecciona un archivo de audio primero.');
+      setStatusMessage('Por favor, selecciona un archivo primero.');
+      setStatus('error');
       return;
     }
 
-    setIsUploading(true);
-    setMessage('Subiendo archivo...');
-    setTranscription('');
-
     try {
-      // --- Paso 1: Subir el archivo ---
+      // --- 1. Subir el archivo ---
+      setStatus('uploading');
+      setStatusMessage('Subiendo archivo a almacenamiento seguro...');
       const formData = new FormData();
       formData.append('file', file);
-      
-      const uploadResponse = await fetch('/api/upload-file', {
-        method: 'POST',
-        body: formData,
-      });
 
+      const uploadResponse = await fetch('/api/upload-file', { method: 'POST', body: formData });
       const uploadResult = await uploadResponse.json();
 
-      if (!uploadResponse.ok) {
-        throw new Error(uploadResult.error || 'Fallo desconocido en la subida.');
-      }
+      if (!uploadResponse.ok) throw new Error(uploadResult.error || 'Fallo en la subida del archivo.');
       
-      // --- Paso 2: Transcribir el archivo ---
-      setMessage(`✅ Archivo subido. Transcribiendo...`);
+      // --- 2. Transcribir el archivo ---
+      setStatus('transcribing');
+      setStatusMessage('✅ Archivo subido. Transcribiendo...');
       const { publicUrl } = uploadResult;
 
-      if (!publicUrl) {
-        throw new Error('La API de subida no devolvió una URL pública.');
-      }
-      
       const transcribeResponse = await fetch('/api/transcribe', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ publicUrl }), // Enviamos la URL pública
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicUrl }),
       });
-
       const transcribeResult = await transcribeResponse.json();
 
-      if (!transcribeResponse.ok) {
-        throw new Error(transcribeResult.error || 'Fallo en la transcripción.');
-      }
+      if (!transcribeResponse.ok) throw new Error(transcribeResult.error || 'Fallo en la transcripción.');
 
-      // --- Paso 3: Mostrar el resultado ---
+      // --- 3. Éxito ---
+      setStatus('success');
+      setStatusMessage('¡Transcripción completada con éxito!');
       setTranscription(transcribeResult.transcription);
-      setMessage('¡Transcripción completada!');
-      setFile(null);
+      setFile(null); // Limpia el input de archivo
 
     } catch (error) {
-      console.error('Error durante el proceso:', error);
-      setMessage(`❌ Error: ${(error as Error).message}`);
-    } finally {
-      setIsUploading(false);
+      console.error('Error en el proceso:', error);
+      setStatus('error');
+      setStatusMessage(`❌ Error: ${(error as Error).message}`);
     }
   }, [file]);
 
+  // Determina el texto del botón basado en el estado
+  const buttonText = useMemo(() => {
+    switch (status) {
+      case 'uploading': return 'Subiendo...';
+      case 'transcribing': return 'Transcribiendo...';
+      default: return 'Subir y Transcribir';
+    }
+  }, [status]);
+
   return (
-    <div className="p-8 max-w-lg mx-auto bg-white shadow-lg rounded-xl">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Cargar Archivo de Voz</h2>
+    <div className="w-full">
+      <h2 className="text-2xl font-bold mb-6 text-gray-800 text-center">Cargar Archivo</h2>
       
-      <div className="mb-4">
+      <div className="mb-5">
+        <label htmlFor="audio-file-input" className="sr-only">Seleccionar archivo</label>
         <input
           type="file"
           id="audio-file-input"
           accept="audio/*,video/*"
           onChange={handleFileChange}
-          className="block w-full text-sm text-gray-500
+          disabled={isProcessing}
+          className="block w-full text-sm text-slate-500
             file:mr-4 file:py-2 file:px-4
             file:rounded-full file:border-0
             file:text-sm file:font-semibold
             file:bg-violet-50 file:text-violet-700
-            hover:file:bg-violet-100"
-          disabled={isUploading}
+            hover:file:bg-violet-100
+            disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
 
       <button
-        onClick={handleUpload}
-        disabled={!file || isUploading}
-        className={`w-full py-2 px-4 rounded-lg text-white font-semibold transition-colors 
-          ${!file || isUploading
+        onClick={handleSubmit}
+        disabled={!file || isProcessing}
+        className={`w-full py-3 px-4 rounded-lg text-white font-semibold transition-all duration-300 ease-in-out
+          ${!file || isProcessing
             ? 'bg-gray-400 cursor-not-allowed'
-            : 'bg-green-600 hover:bg-green-700'
+            : 'bg-green-600 hover:bg-green-700 transform hover:-translate-y-1'
           }`}
       >
-        {isUploading ? 'Procesando...' : 'Subir y Transcribir'}
+        {buttonText}
       </button>
 
-      {message && (
-        <p className={`mt-4 text-sm text-center p-3 rounded ${message.startsWith('❌') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-          {message}
-        </p>
+      {statusMessage && (
+        <div className={`mt-4 text-center p-3 rounded-lg text-sm
+          ${status === 'error' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+          <p>{statusMessage}</p>
+        </div>
       )}
 
       {transcription && (
-        <div className="mt-6 p-4 border rounded-md bg-gray-50">
+        <div className="mt-6 p-4 border rounded-md bg-gray-50 text-left">
           <h3 className="font-semibold text-gray-800 mb-2">Transcripción:</h3>
-          <p className="text-gray-700 whitespace-pre-wrap">{transcription}</p>
+          <p className="text-gray-700 whitespace-pre-wrap font-mono">{transcription}</p>
         </div>
       )}
     </div>

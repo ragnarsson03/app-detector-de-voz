@@ -1,66 +1,42 @@
 // src/app/api/upload-file/route.ts
 
 import { NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase-server';
+import { uploadFileToStorage } from '@/lib/supabase-storage';
 
-// POST handler para recibir el archivo
+/**
+ * API route handler para subir un archivo.
+ * Extrae el archivo de la solicitud, lo sube a Supabase Storage
+ * usando un módulo de servicio, y devuelve la URL pública.
+ */
 export async function POST(request: Request) {
-  // 1. Validar la solicitud
-  if (!request.body) {
-    return NextResponse.json({ error: 'No se encontró el cuerpo de la solicitud (archivo).' }, { status: 400 });
-  }
-
-  // 2. Leer el formulario multipart (que contiene el archivo)
-  const formData = await request.formData();
-  const file = formData.get('file') as File | null;
-  
-  if (!file || file.size === 0) {
-    return NextResponse.json({ error: 'No se encontró el archivo de voz.' }, { status: 400 });
-  }
-
-  const fileExtension = file.name.split('.').pop();
-  // Crea un nombre único para el archivo en el bucket
-  const uniqueFileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExtension}`;
-
   try {
-    // Convierte el archivo a Buffer para subirlo
+    // 1. Validar y obtener el archivo del FormData
+    const formData = await request.formData();
+    const file = formData.get('file') as File | null;
+
+    if (!file || file.size === 0) {
+      return NextResponse.json({ error: 'No se encontró un archivo de audio válido.' }, { status: 400 });
+    }
+
+    // 2. Convertir el archivo a un Buffer
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
-    // 3. Subir a Supabase Storage
-    const { data, error } = await supabaseServer.storage
-      .from('audio-bucket') // Cambia 'audio-bucket' por el nombre de tu bucket en Supabase
-      .upload(uniqueFileName, fileBuffer, {
-        contentType: file.type,
-        upsert: false, // No sobreescribir si ya existe
-      });
+    // 3. Subir el archivo usando el módulo de storage
+    // La lógica de nombre de archivo, subida y obtención de URL está encapsulada.
+    const publicUrl = await uploadFileToStorage(fileBuffer, file.type, 'audio-bucket');
 
-    if (error) {
-      console.error('Error al subir a Supabase Storage:', error);
-      return NextResponse.json({ error: 'Error al subir a Storage.' }, { status: 500 });
-    }
-
-    console.log('Archivo subido con éxito a Supabase. Path:', data.path);
-
-    // 4. Obtener la URL pública del archivo subido
-    const { data: publicUrlData } = supabaseServer.storage
-      .from('audio-bucket')
-      .getPublicUrl(data.path);
-
-    if (!publicUrlData.publicUrl) {
-      console.error('Error: No se pudo obtener la URL pública. ¿El bucket "audio-bucket" es público?');
-      return NextResponse.json({ error: 'No se pudo obtener la URL pública.' }, { status: 500 });
-    }
-    
-    console.log('URL pública obtenida:', publicUrlData.publicUrl);
-
-    // 5. Devolver la URL pública
+    // 4. Devolver la URL pública en la respuesta
     return NextResponse.json({
       message: 'Archivo subido con éxito.',
-      publicUrl: publicUrlData.publicUrl,
+      publicUrl: publicUrl,
     });
-    
+
   } catch (error) {
-    console.error('Error general del servidor:', error);
-    return NextResponse.json({ error: 'Error interno del servidor.' }, { status: 500 });
+    console.error('Error en el handler de subida:', error);
+    
+    // Devuelve un mensaje de error más específico si es posible
+    const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+    
+    return NextResponse.json({ error: `Error interno del servidor: ${errorMessage}` }, { status: 500 });
   }
 }
