@@ -2,7 +2,7 @@
 
 import Uploader from '@/components/Uploader';
 import Recorder from '@/components/Recorder';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; // Importamos useEffect
 import styles from './transcription.module.css'; // Importamos los módulos de CSS
 import clsx from 'clsx'; // Importamos clsx
 
@@ -12,8 +12,8 @@ const OutputPanel = ({ transcription, handleDownload }: { transcription: string,
 
     return (
         <div 
-            // Usamos las clases del módulo de CSS.
-            className={clsx(styles.panel, styles.outputPanel, 'animate-fadeIn')}
+            // Usamos las clases del módulo de CSS combinadas con la clase de Tailwind para la animación
+            className={clsx(styles.panel, styles.outputPanel, 'w-full', 'flex-1', 'shadow-2xl')}
         >
             <h3 className="text-xl font-semibold mb-4 text-emerald-400 border-b border-gray-700 pb-2">
                 <i className="fas fa-file-alt mr-3"></i> Transcripción / Output
@@ -47,9 +47,12 @@ const OutputPanel = ({ transcription, handleDownload }: { transcription: string,
 
 
 const Transcription = () => {
+    // ESTADO DE LA TRANSCRIPCIÓN: MOVIDO AQUÍ PARA COMPARTIR ENTRE INPUT Y OUTPUT
     const [transcription, setTranscription] = useState('');
+    // NUEVO ESTADO para controlar la visibilidad después de la hidratación
     const [isMounted, setIsMounted] = useState(false); 
 
+    // useEffect se ejecuta solo en el cliente, después de la hidratación
     useEffect(() => {
         setIsMounted(true);
     }, []);
@@ -69,14 +72,17 @@ const Transcription = () => {
 
 
     return (
-        <div className="flex flex-col lg:flex-row items-stretch justify-center gap-10 w-full mt-8">
+        // CORREGIDO: Usamos 'justify-center' y 'items-start' para centrar el bloque horizontalmente 
+        // y asegurar la alineación superior de los paneles.
+        <div className="flex flex-col md:flex-row items-start justify-center gap-10 w-full mt-8">
             
-            {/* COLUMNA IZQUIERDA: INPUTS */}
-            <div className="flex flex-col space-y-8 flex-1 min-w-0">
+            {/* COLUMNA IZQUIERDA: INPUTS (Uploader y Recorder apilados verticalmente) */}
+            {/* ELIMINADO: md:w-1/2. Ahora flex-1 manejará el 50% del espacio disponible. */}
+            <div className="flex flex-col space-y-8 flex-1 min-w-0 w-full">
                 {/* Panel 1: Uploader */}
                 <div
-                    // clsx maneja la lógica condicional para las clases de animación.
-                    className={clsx(styles.panel, styles.inputPanel, {
+                    // Usamos clsx y las clases del módulo CSS para manejar el estado de montaje y la apariencia
+                    className={clsx(styles.panel, {
                         [styles.visibleState]: isMounted,
                         [styles.initialState]: !isMounted
                     })}
@@ -86,18 +92,21 @@ const Transcription = () => {
 
                 {/* Panel 2: Recorder */}
                 <div
-                    // Añadimos la clase de delay directamente.
-                    className={clsx(styles.panel, styles.inputPanel, {
+                    // Usamos clsx y las clases del módulo CSS para manejar el estado de montaje y la apariencia
+                    // Añadimos el delay de Tailwind, ya que no se puede aplicar a una animación definida con @keyframes
+                    // sin modificar la definición del keyframe, pero funciona bien para clases de Tailwind.
+                    className={clsx(styles.panel, 'delay-200', {
                         [styles.visibleState]: isMounted,
                         [styles.initialState]: !isMounted
-                    }, 'delay-200')}
+                    })}
                 >
                     <Recorder setTranscription={setTranscription} />
                 </div>
             </div>
 
-            {/* COLUMNA DERECHA: OUTPUT */}
-            <div className="flex flex-col flex-1 min-w-0 lg:min-h-full">
+            {/* COLUMNA DERECHA: OUTPUT (Panel de Resultados) */}
+            {/* ELIMINADO: md:w-1/2. Ahora flex-1 manejará el 50% del espacio disponible. */}
+            <div className="flex flex-col flex-1 min-w-0 w-full lg:min-h-full">
                 <OutputPanel transcription={transcription} handleDownload={handleDownload} />
             </div>
         </div>
