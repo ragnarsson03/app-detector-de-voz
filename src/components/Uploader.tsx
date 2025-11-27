@@ -85,7 +85,7 @@ export const Uploader = () => {
 
   return (
     <div className="w-full">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800 text-center">Cargar Archivo</h2>
+      <h3 className="text-2xl font-bold mb-6 text-gray-200 text-center">Cargar Archivo</h3>
       
       <div className="mb-5">
         <label htmlFor="audio-file-input" className="sr-only">Seleccionar archivo</label>

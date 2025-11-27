@@ -1,8 +1,6 @@
-// src/components/Recorder.tsx
-
 'use client'; 
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 // Importación con extensión explícita, a veces más robusta en ciertos entornos
 import { handleProcessAudio } from '@/lib/transcription-utils'; 
 
@@ -65,6 +63,9 @@ export const Recorder = () => {
         setMessage('Subiendo audio y esperando transcripción...');
         
         try {
+            // Nota: Aquí se asume que 'handleProcessAudio' está implementado en '@/lib/transcription-utils'
+            // y que maneja la lógica de la API de Gemini (u otra IA)
+            // Para el propósito de esta revisión de UI, asumimos que funciona.
             const transcription = await handleProcessAudio(audioBlob, 'audio.webm'); 
 
             setTranscriptionText(transcription);
@@ -77,7 +78,7 @@ export const Recorder = () => {
         }
     };
 
-    // Función de descarga (la misma que ya implementamos)
+    // Función de descarga
     const handleDownload = () => {
         if (!transcriptionText) return;
         const blob = new Blob([transcriptionText], { type: 'text/plain' });
@@ -91,10 +92,16 @@ export const Recorder = () => {
         URL.revokeObjectURL(url);
     };
 
+    // Icono a usar
+    const Icon = useMemo(() => {
+        if (isProcessing) return <i className="fas fa-circle-notch fa-spin"></i>; // Icono de carga
+        return <i className={`fas ${isRecording ? 'fa-stop' : 'fa-microphone'}`}></i>;
+    }, [isProcessing, isRecording]);
+
 
     return (
-        <div className="w-full text-white font-sans">
-            <h2 className="text-2xl font-bold mb-4 text-gray-200">Grabación Directa del Micrófono</h2>
+        <div className="w-full text-white font-sans flex flex-col items-center">
+            <h3 className="text-2xl font-bold mb-4 text-gray-200 text-center">Grabación Directa del Micrófono</h3>
 
             {/* Botón de control de grabación */}
             <div className="flex justify-center mb-6">
@@ -102,22 +109,22 @@ export const Recorder = () => {
                     onClick={isRecording ? stopRecording : startRecording}
                     disabled={isProcessing}
                     className={`w-24 h-24 rounded-full text-white text-3xl transition-all shadow-lg 
-                        ${isProcessing ? 'bg-gray-500 cursor-not-allowed' : 
-                          isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
+                        ${isProcessing ? 'bg-gray-500 cursor-not-allowed opacity-70' : 
+                          isRecording ? 'bg-red-600 hover:bg-red-700 ring-4 ring-red-400/50' : 'bg-green-600 hover:bg-green-700 ring-4 ring-green-400/50'}`}
                 >
-                    <i className={`fas ${isRecording ? 'fa-stop' : 'fa-microphone'}`}></i>
+                    {Icon}
                 </button>
             </div>
 
             {/* Área de mensajes de estado */}
-            <p className={`text-sm p-3 rounded-lg font-medium text-center whitespace-pre-wrap 
+            <p className={`text-sm p-3 rounded-lg font-medium text-center whitespace-pre-wrap w-full 
               ${message.includes('❌') ? 'bg-red-900 text-red-300' : 'bg-blue-900 text-blue-300'}`}>
                 {isProcessing ? 'Procesando en el servidor...' : message}
             </p>
 
             {/* Área de Transcripción Final */}
             {transcriptionText && (
-                <div className="mt-8">
+                <div className="mt-8 w-full">
                     <h3 className="text-lg font-bold mb-3 text-emerald-400">Transcripción:</h3>
                     <textarea
                         readOnly
