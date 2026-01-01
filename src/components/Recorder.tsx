@@ -1,86 +1,26 @@
-'use client'; 
+'use client';
 
-import { useState, useRef, useCallback, useMemo, Dispatch, SetStateAction } from 'react';
-// Importación con extensión explícita, a veces más robusta en ciertos entornos
-import { handleProcessAudio } from '@/lib/transcription-utils';
+import { useMemo, Dispatch, SetStateAction, useCallback } from 'react';
+import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 
-// Definimos la interfaz para las props del componente
 interface RecorderProps {
     setTranscription: Dispatch<SetStateAction<string>>;
 }
 
 export const Recorder = ({ setTranscription }: RecorderProps) => {
-    // Estados del componente
-    const [isRecording, setIsRecording] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [message, setMessage] = useState('Presiona el micrófono para grabar.');
-    
-    // Referencias a objetos del navegador para la grabación
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
+    const { isRecording, isProcessing, message, startRecording, stopRecording } = useAudioRecorder();
 
-    // Función para iniciar la grabación
-    const startRecording = useCallback(async () => {
-        if (isProcessing) return; // Evitar iniciar mientras procesa
-        setTranscription(''); // Limpia la transcripción anterior en el componente padre
-        setMessage('Solicitando acceso al micrófono...');
-        
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            
-            mediaRecorder.ondataavailable = (event) => {
-                audioChunksRef.current.push(event.data);
-            };
+    const handleStart = useCallback(() => {
+        setTranscription('');
+        startRecording();
+    }, [startRecording, setTranscription]);
 
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                audioChunksRef.current = [];
-                stream.getTracks().forEach(track => track.stop());
-
-                handleStopAndProcess(audioBlob); 
-            };
-
-            mediaRecorderRef.current = mediaRecorder;
-            mediaRecorder.start();
-            setIsRecording(true);
-            setMessage('🔴 Grabando... Haz clic en el botón para detener.');
-            
-        } catch (err) {
-            console.error('Error al acceder al micrófono:', err);
-            setMessage('❌ Error: Acceso al micrófono denegado. Revisa los permisos.');
-            setIsRecording(false);
+    const handleStop = useCallback(async () => {
+        const text = await stopRecording();
+        if (text) {
+            setTranscription(text);
         }
-    }, [isProcessing]);
-
-    // Función para detener la grabación
-    const stopRecording = useCallback(() => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop();
-            setIsRecording(false);
-        }
-    }, []);
-    
-    // Llama al backend con el audio grabado
-    const handleStopAndProcess = async (audioBlob: Blob) => {
-        setIsProcessing(true);
-        setMessage('Subiendo audio y esperando transcripción...');
-        
-        try {
-            // Nota: Aquí se asume que 'handleProcessAudio' está implementado en '@/lib/transcription-utils'
-            // y que maneja la lógica de la API de Gemini (u otra IA)
-            // Para el propósito de esta revisión de UI, asumimos que funciona.
-            const transcription = await handleProcessAudio(audioBlob, 'audio.webm');
-
-            setTranscription(transcription); // Actualiza el estado en el componente padre
-            setMessage('✅ Transcripción completada.');
-
-        } catch (error) {
-            setMessage(`❌ Error al transcribir: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-        } finally {
-            setIsProcessing(false);
-        }
-    };
+    }, [stopRecording, setTranscription]);
 
     // Icono a usar
     const Icon = useMemo(() => {
@@ -96,12 +36,13 @@ export const Recorder = ({ setTranscription }: RecorderProps) => {
             {/* Botón de control de grabación */}
             <div className="flex justify-center mb-6">
                 <button
-                    onClick={isRecording ? stopRecording : startRecording}
+                    onClick={isRecording ? handleStop : handleStart}
                     disabled={isProcessing}
+                    aria-label={isRecording ? "Detener grabación" : "Iniciar grabación"}
                     className={`w-24 h-24 rounded-full text-3xl transition-all shadow-lg transform hover:scale-110 flex items-center justify-center
                         ${isProcessing ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed border border-gray-600' :
-                          isRecording ? 'bg-red-500/90 text-white hover:bg-red-600 ring-4 ring-red-400/50 animate-pulse' :
-                          'bg-transparent border-2 border-cyan-400/60 text-cyan-300 hover:bg-cyan-900/40 hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(0,246,255,0.4)]'}`}
+                            isRecording ? 'bg-red-500/90 text-white hover:bg-red-600 ring-4 ring-red-400/50 animate-pulse' :
+                                'bg-transparent border-2 border-cyan-400/60 text-cyan-300 hover:bg-cyan-900/40 hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(0,246,255,0.4)]'}`}
                 >
                     {Icon}
                 </button>
