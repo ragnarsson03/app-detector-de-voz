@@ -2,94 +2,93 @@
 
 'use client';
 
-import { useState, useCallback, useMemo, Dispatch, SetStateAction } from 'react';
 import { useFileUploader } from '@/hooks/useFileUploader';
+import React, { useRef, ChangeEvent } from 'react';
+import clsx from 'clsx';
 
-interface UploaderProps {
-  setTranscription: Dispatch<SetStateAction<string>>;
-}
-
-export const Uploader = ({ setTranscription }: UploaderProps) => {
-  const [file, setFile] = useState<File | null>(null);
+const Uploader = ({ setTranscription }: { setTranscription: (text: string) => void }) => {
+  // Usamos el hook personalizado para manejar la lógica de subida y transcripción
   const { status, statusMessage, isProcessing, uploadFile, setStatusMessage, resetStatus } = useFileUploader();
 
-  // Maneja la selección de un nuevo archivo
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      resetStatus();
-      setStatusMessage(`Archivo listo: ${selectedFile.name}`);
-      setTranscription(''); // Limpia la transcripción anterior en el componente padre
+  // Referencia al input para poder limpiarlo
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Limpiar transcripción previa
+    setTranscription('');
+
+    // Ejecutar subida
+    const text = await uploadFile(file);
+
+    // Si hay resultado, actualizar el padre
+    if (text) {
+      setTranscription(text);
+    }
+
+    // Limpiar el input para permitir subir el mismo archivo de nuevo si se desea
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
-  // Orquesta el proceso de subida y transcripción
-  const handleSubmit = useCallback(async () => {
-    if (!file) {
-      setStatusMessage('Por favor, selecciona un archivo primero.');
-      return;
-    }
-
-    const transcription = await uploadFile(file);
-    if (transcription) {
-      setTranscription(transcription);
-      setFile(null); // Limpia el input de archivo
-    }
-  }, [file, uploadFile, setTranscription, setStatusMessage]);
-
-  // Determina el texto del botón basado en el estado
-  const buttonText = useMemo(() => {
-    switch (status) {
-      case 'uploading': return 'Subiendo...';
-      case 'transcribing': return 'Transcribiendo...';
-      default: return 'Subir y Transcribir';
-    }
-  }, [status]);
-
   return (
-    <div className="w-full">
-      <h3 className="text-2xl font-bold mb-6 text-cyan-200 text-center" style={{ textShadow: '0 0 8px rgba(0, 246, 255, 0.5)' }}>Cargar Archivo</h3>
+    <div className="flex flex-col items-center justify-center p-8 bg-neutral-900/30 border border-white/5 rounded-[2rem] w-full min-h-[300px]">
 
-      <div className="mb-5">
-        <label htmlFor="audio-file-input" className="sr-only">Seleccionar archivo</label>
-        <input
-          type="file"
-          id="audio-file-input"
-          accept="audio/*,video/*"
-          onChange={handleFileChange}
-          disabled={isProcessing}
-          aria-label="Seleccionar archivo de audio o video"
-          className="block w-full text-sm text-gray-400 cursor-pointer
-            file:mr-4 file:py-2 file:px-4
-            file:rounded-lg file:border file:border-cyan-400/50
-            file:text-sm file:font-semibold
-            file:bg-transparent file:text-cyan-300
-            hover:file:bg-cyan-900/40 hover:file:border-cyan-400
-            disabled:opacity-50 disabled:cursor-not-allowed"
-        />
+      <div className="w-full max-w-sm flex flex-col gap-6">
+
+        {/* Zona de Input de Archivo Minimalista */}
+        <div className="relative group w-full">
+          <input
+            type="file"
+            id="file-upload"
+            ref={fileInputRef}
+            accept="audio/*"
+            onChange={handleFileChange}
+            disabled={isProcessing}
+            className="hidden"
+            aria-label="Seleccionar archivo de audio"
+          />
+          <label
+            htmlFor="file-upload"
+            className={clsx(
+              "flex flex-col items-center justify-center w-full h-32 border border-dashed rounded-2xl cursor-pointer transition-all duration-300",
+              isProcessing
+                ? "border-white/10 bg-neutral-900/50 cursor-not-allowed opacity-50"
+                : "border-neutral-700 bg-neutral-900/20 hover:bg-neutral-800 hover:border-neutral-500"
+            )}
+          >
+            <div className="flex flex-col items-center gap-3 text-neutral-500 group-hover:text-neutral-300 transition-colors">
+              {isProcessing ? (
+                <i className="fas fa-circle-notch fa-spin text-2xl"></i>
+              ) : (
+                <i className="fas fa-cloud-upload-alt text-3xl mb-1"></i>
+              )}
+              <span className="text-sm font-medium tracking-wide">
+                {isProcessing ? 'Procesando...' : 'Seleccionar Archivo'}
+              </span>
+            </div>
+          </label>
+        </div>
+
+        {/* Mensaje de Estado */}
+        <div className="h-6 text-center">
+          {statusMessage && (
+            <p className={clsx(
+              "text-xs font-medium animate-fadeIn",
+              status === 'error' ? "text-red-400" : "text-neutral-400"
+            )}>
+              {statusMessage}
+            </p>
+          )}
+        </div>
       </div>
 
-      <button
-        onClick={handleSubmit}
-        disabled={!file || isProcessing}
-        aria-label={buttonText}
-        className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 ease-in-out border
-          ${!file || isProcessing
-            ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed border-gray-600'
-            : 'text-cyan-300 border-cyan-400/50 hover:bg-cyan-900/40 hover:text-white hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(0,246,255,0.3)] transform hover:-translate-y-1'
-          }`}
-      >
-        {buttonText}
-      </button>
-
-      {statusMessage && (
-        <div className={`mt-4 text-center p-3 rounded-lg text-sm font-medium
-          ${status === 'error' ? 'bg-red-900/50 text-red-300' : 'bg-cyan-900/50 text-cyan-200'}`}>
-          <p>{statusMessage}</p>
-        </div>
-      )}
-
+      <p className="mt-8 text-neutral-600 text-[10px] uppercase tracking-widest opacity-40">
+        Soporta MP3, WAV, WebM
+      </p>
     </div>
   );
 };

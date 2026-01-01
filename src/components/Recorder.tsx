@@ -1,60 +1,81 @@
 'use client';
-
-import { useMemo, Dispatch, SetStateAction, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
+import clsx from 'clsx';
 
-interface RecorderProps {
-    setTranscription: Dispatch<SetStateAction<string>>;
-}
-
-export const Recorder = ({ setTranscription }: RecorderProps) => {
+const Recorder = ({ setTranscription }: { setTranscription: (text: string) => void }) => {
+    // Usamos el hook personalizado
     const { isRecording, isProcessing, message, startRecording, stopRecording } = useAudioRecorder();
 
-    const handleStart = useCallback(() => {
-        setTranscription('');
-        startRecording();
-    }, [startRecording, setTranscription]);
-
-    const handleStop = useCallback(async () => {
-        const text = await stopRecording();
-        if (text) {
-            setTranscription(text);
+    const handleToggleRecording = async () => {
+        if (isRecording) {
+            const text = await stopRecording();
+            if (text) setTranscription(text);
+        } else {
+            setTranscription('');
+            await startRecording();
         }
-    }, [stopRecording, setTranscription]);
-
-    // Icono a usar
-    const Icon = useMemo(() => {
-        if (isProcessing) return <i className="fas fa-circle-notch fa-spin"></i>; // Icono de carga
-        return <i className={`fas ${isRecording ? 'fa-stop' : 'fa-microphone'}`}></i>;
-    }, [isProcessing, isRecording]);
-
+    };
 
     return (
-        <div className="w-full text-white font-sans flex flex-col items-center">
-            <h3 className="text-2xl font-bold mb-4 text-cyan-200 text-center" style={{ textShadow: '0 0 8px rgba(0, 246, 255, 0.5)' }}>Grabación Directa</h3>
+        <div className="flex flex-col items-center justify-center p-12 bg-neutral-900/30 border border-white/5 rounded-[2rem] w-full min-h-[300px]">
 
-            {/* Botón de control de grabación */}
-            <div className="flex justify-center mb-6">
-                <button
-                    onClick={isRecording ? handleStop : handleStart}
-                    disabled={isProcessing}
-                    aria-label={isRecording ? "Detener grabación" : "Iniciar grabación"}
-                    className={`w-24 h-24 rounded-full text-3xl transition-all shadow-lg transform hover:scale-110 flex items-center justify-center
-                        ${isProcessing ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed border border-gray-600' :
-                            isRecording ? 'bg-red-500/90 text-white hover:bg-red-600 ring-4 ring-red-400/50 animate-pulse' :
-                                'bg-transparent border-2 border-cyan-400/60 text-cyan-300 hover:bg-cyan-900/40 hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(0,246,255,0.4)]'}`}
-                >
-                    {Icon}
-                </button>
+            {/* Visualizador de Estado Minimalista */}
+            <div className="mb-12 h-8 flex items-center justify-center">
+                {isRecording ? (
+                    <div className="flex items-center gap-3 px-4 py-2 bg-red-500/10 rounded-full border border-red-500/20 animate-fadeIn">
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                        </span>
+                        <span className="text-xs font-medium text-red-400 uppercase tracking-widest">Grabando</span>
+                    </div>
+                ) : isProcessing ? (
+                    <div className="flex items-center gap-3 px-4 py-2 bg-cyan-500/10 rounded-full border border-cyan-500/20 animate-fadeIn">
+                        <i className="fas fa-circle-notch fa-spin text-cyan-400 text-xs"></i>
+                        <span className="text-xs font-medium text-cyan-400 uppercase tracking-widest">Procesando</span>
+                    </div>
+                ) : (
+                    <span className="text-neutral-600 text-sm font-light tracking-wide">Listo para escuchar</span>
+                )}
             </div>
 
-            {/* Área de mensajes de estado */}
-            <p className={`text-sm p-3 rounded-lg font-medium text-center whitespace-pre-wrap w-full
-              ${message.includes('❌') ? 'bg-red-900/50 text-red-300' : 'bg-cyan-900/50 text-cyan-200'}`}>
-                {isProcessing ? 'Procesando en el servidor...' : message}
+            {/* Botón Principal - Minimalista */}
+            <button
+                onClick={handleToggleRecording}
+                disabled={isProcessing}
+                className={clsx(
+                    'group relative flex items-center justify-center w-24 h-24 rounded-full transition-all duration-500 ease-out focus:outline-none',
+                    isRecording
+                        ? 'bg-red-500 shadow-[0_0_30px_-5px_rgba(239,68,68,0.4)] scale-110'
+                        : 'bg-white hover:bg-neutral-200 hover:scale-105 hover:shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)]',
+                    isProcessing && 'opacity-50 cursor-not-allowed scale-95 bg-neutral-700'
+                )}
+                aria-label={isRecording ? "Detener grabación" : "Iniciar grabación"}
+            >
+                <i className={clsx(
+                    "fas fa-microphone text-3xl transition-colors duration-300",
+                    isRecording ? "text-white" : "text-black group-hover:text-black/80"
+                )}></i>
+
+                {/* Anillos decorativos sutiles en hover cuando no graba */}
+                {!isRecording && !isProcessing && (
+                    <span className="absolute inset-0 rounded-full border border-white/30 scale-110 opacity-0 group-hover:scale-125 group-hover:opacity-100 transition-all duration-700"></span>
+                )}
+            </button>
+
+            <p className="mt-8 text-neutral-500 text-xs tracking-wider uppercase opacity-60">
+                {isRecording ? 'Presiona para detener' : 'Click para grabar'}
             </p>
 
+            {/* Mensaje de error o estado secundario */}
+            {message && (
+                <p className="mt-4 text-xs font-medium text-red-400 text-center max-w-xs animate-fadeIn">
+                    {message}
+                </p>
+            )}
         </div>
     );
 };
+
 export default Recorder;
