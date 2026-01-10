@@ -10,9 +10,8 @@ const Recorder = ({ setTranscription }: { setTranscription: (text: string) => vo
     const handleToggleRecording = async () => {
         if (isRecording) {
             const text = await stopRecording();
-            if (text) setTranscription(text);
+
         } else {
-            setTranscription('');
             await startRecording();
         }
     };

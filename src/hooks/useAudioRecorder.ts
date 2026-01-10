@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { handleProcessAudio } from '@/lib/transcription-utils';
 
 export const useAudioRecorder = () => {
+    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [message, setMessage] = useState('Presiona el micrófono para grabar.');
@@ -10,11 +11,14 @@ export const useAudioRecorder = () => {
 
     const startRecording = useCallback(async (onStart?: () => void, onError?: (err: unknown) => void) => {
         if (isProcessing) return;
+        setAudioBlob(null); // Clear pr evious recording
 
         try {
             setMessage('Solicitando acceso al micrófono...');
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mediaRecorder = new MediaRecorder(stream);
+
+            audioChunksRef.current = []; // Reset chunks
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -22,11 +26,12 @@ export const useAudioRecorder = () => {
                 }
             };
 
-            // We return a promise that resolves with the blob when recording stops
             mediaRecorder.onstop = () => {
-                // Logic handled in stopRecording wrapper or externally if needed, 
-                // but here we mainly manage the state. 
-                // Actual processing happens when we call stop.
+                const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                setAudioBlob(blob);
+                audioChunksRef.current = [];
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                setMessage('Audio capturado. Listo para transcribir.');
             };
 
             mediaRecorderRef.current = mediaRecorder;
@@ -43,46 +48,36 @@ export const useAudioRecorder = () => {
         }
     }, [isProcessing]);
 
-    const stopRecording = useCallback(async (): Promise<string | null> => {
-        return new Promise((resolve) => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+    const stopRecording = useCallback(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+        }
+    }, []);
 
-                mediaRecorderRef.current.onstop = async () => {
-                    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                    audioChunksRef.current = [];
-
-                    // Stop all tracks
-                    mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
-
-                    setIsRecording(false);
-                    setIsProcessing(true);
-                    setMessage('Subiendo audio y esperando transcripción...');
-
-                    try {
-                        const transcription = await handleProcessAudio(audioBlob, 'audio.webm');
-                        setMessage('✅ Transcripción completada.');
-                        resolve(transcription);
-                    } catch (error) {
-                        const errMsg = error instanceof Error ? error.message : 'Error desconocido';
-                        setMessage(`❌ Error al transcribir: ${errMsg}`);
-                        resolve(null);
-                    } finally {
-                        setIsProcessing(false);
-                    }
-                };
-
-                mediaRecorderRef.current.stop();
-            } else {
-                resolve(null);
-            }
-        });
+    const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
+        setIsProcessing(true);
+        setMessage('Subiendo audio y esperando transcripción...');
+        try {
+            const transcription = await handleProcessAudio(blob, 'audio.webm');
+            setMessage('✅ Transcripción completada.');
+            return transcription;
+        } catch (error) {
+            const errMsg = error instanceof Error ? error.message : 'Error desconocido';
+            setMessage(`❌ Error al transcribir: ${errMsg}`);
+            return null;
+        } finally {
+            setIsProcessing(false);
+        }
     }, []);
 
     return {
         isRecording,
         isProcessing,
         message,
+        audioBlob,
         startRecording,
-        stopRecording
+        stopRecording,
+        transcribeAudio
     };
 };
