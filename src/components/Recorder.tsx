@@ -1,139 +1,80 @@
-// src/components/Recorder.tsx
+'use client';
+import React, { useState, useEffect } from 'react';
+import { useAudioRecorder } from '@/hooks/useAudioRecorder';
+import clsx from 'clsx';
 
-'use client'; 
+const Recorder = ({ setTranscription }: { setTranscription: (text: string) => void }) => {
+    // Usamos el hook personalizado
+    const { isRecording, isProcessing, message, startRecording, stopRecording } = useAudioRecorder();
 
-import { useState, useRef, useCallback } from 'react';
-// Importación con extensión explícita, a veces más robusta en ciertos entornos
-import { handleProcessAudio } from '@/lib/transcription-utils'; 
+    const handleToggleRecording = async () => {
+        if (isRecording) {
+            const text = await stopRecording();
 
-export const Recorder = () => {
-    // Estados del componente
-    const [isRecording, setIsRecording] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [message, setMessage] = useState('Presiona el micrófono para grabar.');
-    const [transcriptionText, setTranscriptionText] = useState('');
-    
-    // Referencias a objetos del navegador para la grabación
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-
-    // Función para iniciar la grabación
-    const startRecording = useCallback(async () => {
-        if (isProcessing) return; // Evitar iniciar mientras procesa
-        setTranscriptionText('');
-        setMessage('Solicitando acceso al micrófono...');
-        
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            
-            mediaRecorder.ondataavailable = (event) => {
-                audioChunksRef.current.push(event.data);
-            };
-
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                audioChunksRef.current = [];
-                stream.getTracks().forEach(track => track.stop());
-
-                handleStopAndProcess(audioBlob); 
-            };
-
-            mediaRecorderRef.current = mediaRecorder;
-            mediaRecorder.start();
-            setIsRecording(true);
-            setMessage('🔴 Grabando... Haz clic en el botón para detener.');
-            
-        } catch (err) {
-            console.error('Error al acceder al micrófono:', err);
-            setMessage('❌ Error: Acceso al micrófono denegado. Revisa los permisos.');
-            setIsRecording(false);
-        }
-    }, [isProcessing]);
-
-    // Función para detener la grabación
-    const stopRecording = useCallback(() => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop();
-            setIsRecording(false);
-        }
-    }, []);
-    
-    // Llama al backend con el audio grabado
-    const handleStopAndProcess = async (audioBlob: Blob) => {
-        setIsProcessing(true);
-        setMessage('Subiendo audio y esperando transcripción...');
-        
-        try {
-            const transcription = await handleProcessAudio(audioBlob, 'audio.webm'); 
-
-            setTranscriptionText(transcription);
-            setMessage('✅ Transcripción completada.');
-
-        } catch (error) {
-            setMessage(`❌ Error al transcribir: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-        } finally {
-            setIsProcessing(false);
+        } else {
+            await startRecording();
         }
     };
-
-    // Función de descarga (la misma que ya implementamos)
-    const handleDownload = () => {
-        if (!transcriptionText) return;
-        const blob = new Blob([transcriptionText], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `transcripcion_microfono_${Date.now()}.txt`; 
-        document.body.appendChild(a); 
-        a.click(); 
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
-
 
     return (
-        <div className="w-full text-white font-sans">
-            <h2 className="text-2xl font-bold mb-4 text-gray-200">Grabación Directa del Micrófono</h2>
+        <div className="flex flex-col items-center justify-center p-12 bg-neutral-900/30 border border-white/5 rounded-[2rem] w-full min-h-[300px]">
 
-            {/* Botón de control de grabación */}
-            <div className="flex justify-center mb-6">
-                <button
-                    onClick={isRecording ? stopRecording : startRecording}
-                    disabled={isProcessing}
-                    className={`w-24 h-24 rounded-full text-white text-3xl transition-all shadow-lg 
-                        ${isProcessing ? 'bg-gray-500 cursor-not-allowed' : 
-                          isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
-                >
-                    <i className={`fas ${isRecording ? 'fa-stop' : 'fa-microphone'}`}></i>
-                </button>
+            {/* Visualizador de Estado Minimalista */}
+            <div className="mb-12 h-8 flex items-center justify-center">
+                {isRecording ? (
+                    <div className="flex items-center gap-3 px-4 py-2 bg-red-500/10 rounded-full border border-red-500/20 animate-fadeIn">
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                        </span>
+                        <span className="text-xs font-medium text-red-400 uppercase tracking-widest">Grabando</span>
+                    </div>
+                ) : isProcessing ? (
+                    <div className="flex items-center gap-3 px-4 py-2 bg-cyan-500/10 rounded-full border border-cyan-500/20 animate-fadeIn">
+                        <i className="fas fa-circle-notch fa-spin text-cyan-400 text-xs"></i>
+                        <span className="text-xs font-medium text-cyan-400 uppercase tracking-widest">Procesando</span>
+                    </div>
+                ) : (
+                    <span className="text-neutral-600 text-sm font-light tracking-wide">Listo para escuchar</span>
+                )}
             </div>
 
-            {/* Área de mensajes de estado */}
-            <p className={`text-sm p-3 rounded-lg font-medium text-center whitespace-pre-wrap 
-              ${message.includes('❌') ? 'bg-red-900 text-red-300' : 'bg-blue-900 text-blue-300'}`}>
-                {isProcessing ? 'Procesando en el servidor...' : message}
+            {/* Botón Principal - Minimalista */}
+            <button
+                onClick={handleToggleRecording}
+                disabled={isProcessing}
+                className={clsx(
+                    'group relative flex items-center justify-center w-24 h-24 rounded-full transition-all duration-500 ease-out focus:outline-none',
+                    isRecording
+                        ? 'bg-red-500 shadow-[0_0_30px_-5px_rgba(239,68,68,0.4)] scale-110'
+                        : 'bg-white hover:bg-neutral-200 hover:scale-105 hover:shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)]',
+                    isProcessing && 'opacity-50 cursor-not-allowed scale-95 bg-neutral-700'
+                )}
+                aria-label={isRecording ? "Detener grabación" : "Iniciar grabación"}
+            >
+                <i className={clsx(
+                    "fas fa-microphone text-3xl transition-colors duration-300",
+                    isRecording ? "text-white" : "text-black group-hover:text-black/80"
+                )}></i>
+
+                {/* Anillos decorativos sutiles en hover cuando no graba */}
+                {!isRecording && !isProcessing && (
+                    <span className="absolute inset-0 rounded-full border border-white/30 scale-110 opacity-0 group-hover:scale-125 group-hover:opacity-100 transition-all duration-700"></span>
+                )}
+            </button>
+
+            <p className="mt-8 text-neutral-500 text-xs tracking-wider uppercase opacity-60">
+                {isRecording ? 'Presiona para detener' : 'Click para grabar'}
             </p>
 
-            {/* Área de Transcripción Final */}
-            {transcriptionText && (
-                <div className="mt-8">
-                    <h3 className="text-lg font-bold mb-3 text-emerald-400">Transcripción:</h3>
-                    <textarea
-                        readOnly
-                        value={transcriptionText}
-                        className="w-full h-40 p-4 text-gray-100 bg-gray-800 border border-gray-700 rounded-lg overflow-y-auto shadow-inner resize-none"
-                        style={{ outline: 'none' }}
-                    />
-                    <button
-                        onClick={handleDownload}
-                        className="w-full mt-3 py-2 px-6 rounded-lg font-semibold transition-colors bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                        <i className="fas fa-download mr-2"></i> Descargar Transcripción (.txt)
-                    </button>
-                </div>
+            {/* Mensaje de error o estado secundario */}
+            {message && (
+                <p className="mt-4 text-xs font-medium text-red-400 text-center max-w-xs animate-fadeIn">
+                    {message}
+                </p>
             )}
         </div>
     );
 };
+
 export default Recorder;
