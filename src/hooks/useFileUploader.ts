@@ -1,6 +1,9 @@
 import { useState, useCallback, useMemo } from 'react';
+import { Client } from '@gradio/client';
 
 export type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
+
+const HUGGINGFACE_SPACE = 'xxNikoXx/whisper-asr';
 
 export const useFileUploader = () => {
     const [status, setStatus] = useState<UploadStatus>('idle');
@@ -13,36 +16,31 @@ export const useFileUploader = () => {
         if (!file) return null;
 
         try {
-            // --- 1. Subir el archivo ---
-            setStatus('uploading');
-            setStatusMessage('Subiendo archivo a almacenamiento seguro...');
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const uploadResponse = await fetch('/api/upload-file', { method: 'POST', body: formData });
-            const uploadResult = await uploadResponse.json();
-
-            if (!uploadResponse.ok) throw new Error(uploadResult.error || 'Fallo en la subida del archivo.');
-
-            // --- 2. Transcribir el archivo ---
+            // --- Conexión directa con Hugging Face usando Gradio Client ---
             setStatus('transcribing');
-            setStatusMessage('✅ Archivo subido. Transcribiendo...');
-            const { publicUrl } = uploadResult;
+            setStatusMessage('Conectando con Hugging Face...');
 
-            const transcribeResponse = await fetch('/api/transcribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ publicUrl }),
+            const client = await Client.connect(HUGGINGFACE_SPACE);
+
+            setStatusMessage('Enviando audio para transcripción...');
+
+            // Enviar archivo directamente al endpoint /predict
+            const result = await client.predict("/predict", {
+                audio: file
             });
-            const transcribeResult = await transcribeResponse.json();
 
-            if (!transcribeResponse.ok) throw new Error(transcribeResult.error || 'Fallo en la transcripción.');
+            // Extraer transcripción del resultado
+            const transcription = result.data as string;
 
-            // --- 3. Éxito ---
+            if (!transcription) {
+                throw new Error('No se recibió transcripción del servidor');
+            }
+
+            // --- Éxito ---
             setStatus('success');
             setStatusMessage('¡Transcripción completada con éxito!');
-            setTranscriptionResult(transcribeResult.transcription);
-            return transcribeResult.transcription;
+            setTranscriptionResult(transcription);
+            return transcription;
 
         } catch (error) {
             console.error('Error en el proceso:', error);
@@ -65,6 +63,6 @@ export const useFileUploader = () => {
         uploadFile,
         transcriptionResult,
         resetStatus,
-        setStatusMessage // Exposing this in case we need to set manual messages like "File selected"
+        setStatusMessage
     };
 };
