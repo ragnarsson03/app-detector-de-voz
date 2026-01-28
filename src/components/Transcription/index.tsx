@@ -140,14 +140,14 @@ export default function TranscriptionManager() {
                                         ) : (
                                             <div className="flex flex-col items-center z-10">
                                                 <Upload className="mb-4 text-zinc-700 group-hover:text-zinc-400 transition-colors duration-300" size={24} />
-                                                <p className="text-xs text-zinc-500 font-bold mb-1">Seleccionar archivo de audio</p>
-                                                <p className="text-[10px] text-zinc-700 italic">WAV, MP3 o M4A</p>
+                                                <p className="text-xs text-zinc-500 font-bold mb-1">Seleccionar audio o video</p>
+                                                <p className="text-[10px] text-zinc-700 italic">MP3, WAV, M4A, MP4</p>
                                             </div>
                                         )}
 
                                         <input
                                             type="file"
-                                            accept="audio/*,video/*"
+                                            accept="audio/*,video/*,.mp4,.mkv,.mov"
                                             onChange={handleFileSelect}
                                             className="absolute inset-0 opacity-0 cursor-pointer z-20"
                                         />
