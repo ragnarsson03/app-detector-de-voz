@@ -3,6 +3,17 @@
 import { Client } from '@gradio/client';
 
 const HUGGINGFACE_SPACE = 'xxNikoXx/whisper-asr';
+const CONNECTION_TIMEOUT = 60000; // 60 segundos
+
+// Cliente persistente (singleton) compartido
+let gradioClient: Client | null = null;
+
+async function getGradioClient(): Promise<Client> {
+    if (!gradioClient) {
+        gradioClient = await Client.connect(HUGGINGFACE_SPACE);
+    }
+    return gradioClient;
+}
 
 /**
  * Procesa el audio Blob (grabado) enviándolo directamente a Hugging Face.
@@ -20,40 +31,62 @@ export async function handleProcessAudio(
     // Crear un objeto File a partir del Blob para enviarlo a Gradio
     const audioFile = new File([audioBlob], fileName, { type: audioBlob.type });
 
-    // --- Conexión directa con Hugging Face usando Gradio Client ---
-    onProgress?.(10, 'Conectando con Hugging Face...');
-    const client = await Client.connect(HUGGINGFACE_SPACE);
+    // Timeout controller
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+        abortController.abort();
+    }, CONNECTION_TIMEOUT);
 
-    onProgress?.(20, 'Enviando audio...');
+    try {
+        // --- Conexión directa con Hugging Face usando Gradio Client ---
+        onProgress?.(10, 'Conectando con Hugging Face...');
+        const client = await getGradioClient();
 
-    // Usar submit() para obtener eventos de progreso
-    const job = client.submit("/predict", {
-        audio: audioFile
-    });
+        onProgress?.(20, 'Enviando audio...');
 
-    let transcription: string | null = null;
+        // Usar submit() para obtener eventos de progreso
+        // gr.Interface espera un array con los inputs en orden
+        const job = client.submit("/predict", [audioFile]);
 
-    // Escuchar eventos de progreso
-    for await (const message of job) {
-        if (message.type === 'status') {
-            const stage = message.stage as string;
-            if (stage === 'pending') {
-                onProgress?.(30, '⏳ En cola de procesamiento...');
-            } else if (stage === 'generating' || stage === 'streaming') {
-                onProgress?.(50, '🔄 Transcribiendo audio...');
+        let transcription: string | null = null;
+
+        // Escuchar eventos de progreso
+        for await (const message of job) {
+            // Verificar timeout
+            if (abortController.signal.aborted) {
+                throw new Error('Timeout: La transcripción tardó demasiado (>60s)');
             }
-        } else if (message.type === 'data') {
-            onProgress?.(90, '✨ Finalizando...');
-            // Extraer transcripción del evento data
-            transcription = (message.data as unknown) as string;
+
+            if (message.type === 'status') {
+                const stage = message.stage as string;
+                if (stage === 'pending') {
+                    onProgress?.(30, '⏳ En cola de procesamiento...');
+                } else if (stage === 'generating' || stage === 'streaming') {
+                    onProgress?.(50, '🔄 Transcribiendo audio...');
+                }
+            } else if (message.type === 'data') {
+                onProgress?.(90, '✨ Finalizando...');
+                // Extraer transcripción del evento data
+                transcription = (message.data as unknown) as string;
+            }
         }
+
+        clearTimeout(timeoutId);
+        onProgress?.(100, 'Completado');
+
+        if (!transcription) {
+            throw new Error('No se recibió transcripción del servidor de Hugging Face');
+        }
+
+        return transcription;
+    } catch (error) {
+        clearTimeout(timeoutId);
+
+        // Si es error de conexión, resetear cliente
+        if ((error as Error).message.includes('connect') || (error as Error).message.includes('Timeout')) {
+            gradioClient = null;
+        }
+
+        throw error;
     }
-
-    onProgress?.(100, 'Completado');
-
-    if (!transcription) {
-        throw new Error('No se recibió transcripción del servidor de Hugging Face');
-    }
-
-    return transcription;
 }
