@@ -35,15 +35,18 @@ export const useFileUploader = () => {
         }, CONNECTION_TIMEOUT);
 
         try {
-            // Reset progress
+            // Reset state
             setProgress(0);
+            setTranscriptionResult(null);
 
             // --- Conexión directa con Hugging Face usando Gradio Client ---
             setStatus('uploading');
             setStatusMessage('Conectando con Hugging Face...');
             setProgress(10);
 
+            console.log('[DEBUG] Conectando a Gradio Space:', HUGGINGFACE_SPACE);
             const client = await getGradioClient();
+            console.log('[DEBUG] Cliente conectado exitosamente');
             setProgress(20);
 
             setStatus('transcribing');
@@ -51,12 +54,24 @@ export const useFileUploader = () => {
 
             // Usar submit() en lugar de predict() para obtener eventos de progreso
             // gr.Interface espera un array con los inputs en orden
+            console.log('[DEBUG] Enviando archivo:', {
+                name: file.name,
+                size: file.size,
+                type: file.type
+            });
             const job = client.submit("/predict", [file]);
+            console.log('[DEBUG] Job creado, esperando eventos...');
 
             let transcription: string | null = null;
 
             // Escuchar eventos de progreso
             for await (const message of job) {
+                console.log('[DEBUG] Evento recibido:', {
+                    type: message.type,
+                    stage: message.type === 'status' ? (message as any).stage : undefined,
+                    hasData: message.type === 'data'
+                });
+
                 // Verificar si fue abortado
                 if (abortControllerRef.current?.signal.aborted) {
                     throw new Error('Timeout: La transcripción tardó demasiado (>60s)');
@@ -64,6 +79,7 @@ export const useFileUploader = () => {
 
                 if (message.type === 'status') {
                     const stage = message.stage as string;
+                    console.log('[DEBUG] Status stage:', stage);
                     if (stage === 'pending') {
                         setStatusMessage('⏳ En cola de procesamiento...');
                         setProgress(30);
@@ -72,29 +88,50 @@ export const useFileUploader = () => {
                         setProgress(50);
                     }
                 } else if (message.type === 'data') {
-                    setProgress(90);
-                    setStatusMessage('✨ Finalizando...');
-                    // Extraer transcripción del evento data
-                    transcription = (message.data as unknown) as string;
+                    console.log('[DEBUG] Data recibida RAW:', message.data);
+
+                    try {
+                        const data = message.data;
+                        let text = "";
+
+                        // Extracción segura usando String() para evitar problemas de tipos
+                        if (Array.isArray(data) && data.length > 0) {
+                            text = String(data[0]);
+                        } else {
+                            text = String(data);
+                        }
+
+                        console.log('[DEBUG] Texto extraído con éxito:', text);
+
+                        // Guardamos en variable local y actualizamos ESTADO INMEDIATAMENTE
+                        transcription = text;
+                        setTranscriptionResult(text);
+
+                        // Finalizamos visualmente
+                        setProgress(100);
+                        setStatusMessage('✨ Finalizado');
+                        setStatus('success'); // Liberar el botón inmediatamente
+
+                        // Limpiar timeout
+                        clearTimeout(timeoutId);
+
+                        // Reset visual retardado
+                        setTimeout(() => {
+                            setProgress(0);
+                            setStatus('idle');
+                        }, 2000);
+
+                        return text; // Salir de la función directamente
+
+                    } catch (err) {
+                        console.error('[DEBUG] Error fatal al procesar data:', err);
+                        throw err;
+                    }
                 }
             }
 
-            clearTimeout(timeoutId);
-            setProgress(100);
-
-            if (!transcription) {
-                throw new Error('No se recibió transcripción del servidor');
-            }
-
-            // --- Éxito ---
-            setStatus('success');
-            setStatusMessage('¡Transcripción completada con éxito!');
-            setTranscriptionResult(transcription);
-
-            // Reset progress after 1 second
-            setTimeout(() => setProgress(0), 1000);
-
-            return transcription;
+            // Si llegamos aquí sin haber retornado, algo falló
+            throw new Error('El proceso terminó sin recibir datos finales');
 
         } catch (error) {
             clearTimeout(timeoutId);

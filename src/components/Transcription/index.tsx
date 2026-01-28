@@ -26,12 +26,20 @@ export default function TranscriptionManager() {
         uploadFile,
         isProcessing: isUploadProcessing,
         statusMessage: uploaderMessage,
-        progress: uploaderProgress
+        progress: uploaderProgress,
+        transcriptionResult: uploaderResult
     } = useFileUploader();
 
     const isProcessing = isRecordingProcessing || isUploadProcessing;
     const statusMessage = method === 'record' ? recorderMessage : uploaderMessage;
     const progress = method === 'record' ? recorderProgress : uploaderProgress;
+
+    // Sincronizar resultados de los hooks con el estado local
+    React.useEffect(() => {
+        if (method === 'upload' && uploaderResult) {
+            setResult(uploaderResult);
+        }
+    }, [uploaderResult, method]);
 
     // Handlers
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,17 +60,15 @@ export default function TranscriptionManager() {
 
     const handleTranscribe = async () => {
         setResult("");
-        let text: string | null = null;
 
         if (method === 'upload') {
             if (!selectedFile) return;
-            text = await uploadFile(selectedFile);
+            await uploadFile(selectedFile);
         } else {
             if (!audioBlob) return;
-            text = await transcribeAudio(audioBlob);
+            const text = await transcribeAudio(audioBlob);
+            if (text) setResult(text);
         }
-
-        if (text) setResult(text);
     };
 
     // Determine if main button should be disabled
@@ -76,9 +82,7 @@ export default function TranscriptionManager() {
                     style={{ textShadow: '0 0 40px rgba(6,182,212,0.4), 0 0 10px rgba(6,182,212,0.8)' }}>
                     DETECTOR DE VOZ A TEXTO
                 </h1>
-                <p className="text-cyan-500/60 text-xs md:text-sm font-bold tracking-[0.3em] uppercase glow-text">
-                    Advanced Neural Transcription
-                </p>
+
                 {/* Glow ambiental detrás del título */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-24 bg-cyan-500/10 blur-[100px] -z-10 rounded-full pointer-events-none"></div>
             </header>

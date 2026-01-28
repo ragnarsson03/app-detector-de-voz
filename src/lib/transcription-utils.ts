@@ -66,8 +66,21 @@ export async function handleProcessAudio(
                 }
             } else if (message.type === 'data') {
                 onProgress?.(90, '✨ Finalizando...');
-                // Extraer transcripción del evento data
-                transcription = (message.data as unknown) as string;
+
+                try {
+                    const data = message.data;
+                    if (Array.isArray(data) && data.length > 0) {
+                        transcription = String(data[0]);
+                    } else {
+                        transcription = String(data);
+                    }
+                    console.log('[DEBUG] Transcripción (voz) extraída:', transcription);
+                } catch (e) {
+                    console.error('Error extrayendo data:', e);
+                }
+
+                // Ya tenemos la data, salir del loop
+                break;
             }
         }
 
