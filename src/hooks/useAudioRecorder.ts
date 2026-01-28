@@ -6,12 +6,13 @@ export const useAudioRecorder = () => {
     const [isRecording, setIsRecording] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [message, setMessage] = useState('Presiona el micrófono para grabar.');
+    const [progress, setProgress] = useState<number>(0); // 0-100
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
     const startRecording = useCallback(async (onStart?: () => void, onError?: (err: unknown) => void) => {
         if (isProcessing) return;
-        setAudioBlob(null); // Clear pr evious recording
+        setAudioBlob(null); // Clear previous recording
 
         try {
             setMessage('Solicitando acceso al micrófono...');
@@ -57,14 +58,26 @@ export const useAudioRecorder = () => {
 
     const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
         setIsProcessing(true);
-        setMessage('Subiendo audio y esperando transcripción...');
+        setProgress(0);
+        setMessage('Preparando audio...');
+
         try {
-            const transcription = await handleProcessAudio(blob, 'audio.webm');
+            const transcription = await handleProcessAudio(
+                blob,
+                'audio.webm',
+                (progressValue, progressMessage) => {
+                    setProgress(progressValue);
+                    setMessage(progressMessage);
+                }
+            );
+
             setMessage('✅ Transcripción completada.');
+            setTimeout(() => setProgress(0), 1000);
             return transcription;
         } catch (error) {
             const errMsg = error instanceof Error ? error.message : 'Error desconocido';
             setMessage(`❌ Error al transcribir: ${errMsg}`);
+            setProgress(0);
             return null;
         } finally {
             setIsProcessing(false);
@@ -76,6 +89,7 @@ export const useAudioRecorder = () => {
         isProcessing,
         message,
         audioBlob,
+        progress, // Exportar progreso
         startRecording,
         stopRecording,
         transcribeAudio

@@ -1,53 +1,150 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import { Client } from '@gradio/client';
 
 export type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
+
+const HUGGINGFACE_SPACE = 'xxNikoXx/whisper-asr';
+const CONNECTION_TIMEOUT = 60000; // 60 segundos
+
+// Cliente persistente (singleton) para evitar reconexiones
+let gradioClient: Client | null = null;
+
+async function getGradioClient(): Promise<Client> {
+    if (!gradioClient) {
+        gradioClient = await Client.connect(HUGGINGFACE_SPACE);
+    }
+    return gradioClient;
+}
 
 export const useFileUploader = () => {
     const [status, setStatus] = useState<UploadStatus>('idle');
     const [statusMessage, setStatusMessage] = useState('');
     const [transcriptionResult, setTranscriptionResult] = useState<string | null>(null);
+    const [progress, setProgress] = useState<number>(0); // 0-100
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     const isProcessing = useMemo(() => status === 'uploading' || status === 'transcribing', [status]);
 
     const uploadFile = useCallback(async (file: File): Promise<string | null> => {
         if (!file) return null;
 
+        // Crear AbortController para timeout
+        abortControllerRef.current = new AbortController();
+        const timeoutId = setTimeout(() => {
+            abortControllerRef.current?.abort();
+        }, CONNECTION_TIMEOUT);
+
         try {
-            // --- 1. Subir el archivo ---
+            // Reset state
+            setProgress(0);
+            setTranscriptionResult(null);
+
+            // --- Conexión directa con Hugging Face usando Gradio Client ---
             setStatus('uploading');
-            setStatusMessage('Subiendo archivo a almacenamiento seguro...');
-            const formData = new FormData();
-            formData.append('file', file);
+            setStatusMessage('Conectando con Hugging Face...');
+            setProgress(10);
 
-            const uploadResponse = await fetch('/api/upload-file', { method: 'POST', body: formData });
-            const uploadResult = await uploadResponse.json();
+            console.log('[DEBUG] Conectando a Gradio Space:', HUGGINGFACE_SPACE);
+            const client = await getGradioClient();
+            console.log('[DEBUG] Cliente conectado exitosamente');
+            setProgress(20);
 
-            if (!uploadResponse.ok) throw new Error(uploadResult.error || 'Fallo en la subida del archivo.');
-
-            // --- 2. Transcribir el archivo ---
             setStatus('transcribing');
-            setStatusMessage('✅ Archivo subido. Transcribiendo...');
-            const { publicUrl } = uploadResult;
+            setStatusMessage('Enviando audio...');
 
-            const transcribeResponse = await fetch('/api/transcribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ publicUrl }),
+            // Usar submit() en lugar de predict() para obtener eventos de progreso
+            // gr.Interface espera un array con los inputs en orden
+            console.log('[DEBUG] Enviando archivo:', {
+                name: file.name,
+                size: file.size,
+                type: file.type
             });
-            const transcribeResult = await transcribeResponse.json();
+            const job = client.submit("/predict", [file]);
+            console.log('[DEBUG] Job creado, esperando eventos...');
 
-            if (!transcribeResponse.ok) throw new Error(transcribeResult.error || 'Fallo en la transcripción.');
+            let transcription: string | null = null;
 
-            // --- 3. Éxito ---
-            setStatus('success');
-            setStatusMessage('¡Transcripción completada con éxito!');
-            setTranscriptionResult(transcribeResult.transcription);
-            return transcribeResult.transcription;
+            // Escuchar eventos de progreso
+            for await (const message of job) {
+                console.log('[DEBUG] Evento recibido:', {
+                    type: message.type,
+                    stage: message.type === 'status' ? (message as any).stage : undefined,
+                    hasData: message.type === 'data'
+                });
+
+                // Verificar si fue abortado
+                if (abortControllerRef.current?.signal.aborted) {
+                    throw new Error('Timeout: La transcripción tardó demasiado (>60s)');
+                }
+
+                if (message.type === 'status') {
+                    const stage = message.stage as string;
+                    console.log('[DEBUG] Status stage:', stage);
+                    if (stage === 'pending') {
+                        setStatusMessage('⏳ En cola de procesamiento...');
+                        setProgress(30);
+                    } else if (stage === 'generating' || stage === 'complete') {
+                        setStatusMessage('🔄 Transcribiendo audio...');
+                        setProgress(50);
+                    }
+                } else if (message.type === 'data') {
+                    console.log('[DEBUG] Data recibida RAW:', message.data);
+
+                    try {
+                        const data = message.data;
+                        let text = "";
+
+                        // Extracción segura usando String() para evitar problemas de tipos
+                        if (Array.isArray(data) && data.length > 0) {
+                            text = String(data[0]);
+                        } else {
+                            text = String(data);
+                        }
+
+                        console.log('[DEBUG] Texto extraído con éxito:', text);
+
+                        // Guardamos en variable local y actualizamos ESTADO INMEDIATAMENTE
+                        transcription = text;
+                        setTranscriptionResult(text);
+
+                        // Finalizamos visualmente
+                        setProgress(100);
+                        setStatusMessage('✨ Finalizado');
+                        setStatus('success'); // Liberar el botón inmediatamente
+
+                        // Limpiar timeout
+                        clearTimeout(timeoutId);
+
+                        // Reset visual retardado
+                        setTimeout(() => {
+                            setProgress(0);
+                            setStatus('idle');
+                        }, 2000);
+
+                        return text; // Salir de la función directamente
+
+                    } catch (err) {
+                        console.error('[DEBUG] Error fatal al procesar data:', err);
+                        throw err;
+                    }
+                }
+            }
+
+            // Si llegamos aquí sin haber retornado, algo falló
+            throw new Error('El proceso terminó sin recibir datos finales');
 
         } catch (error) {
+            clearTimeout(timeoutId);
             console.error('Error en el proceso:', error);
+
+            // Si es error de conexión, resetear cliente para reconectar
+            if ((error as Error).message.includes('connect') || (error as Error).message.includes('Timeout')) {
+                gradioClient = null;
+            }
+
             setStatus('error');
             setStatusMessage(`❌ Error: ${(error as Error).message}`);
+            setProgress(0);
             return null;
         }
     }, []);
@@ -56,6 +153,7 @@ export const useFileUploader = () => {
         setStatus('idle');
         setStatusMessage('');
         setTranscriptionResult(null);
+        setProgress(0);
     }, []);
 
     return {
@@ -65,6 +163,7 @@ export const useFileUploader = () => {
         uploadFile,
         transcriptionResult,
         resetStatus,
-        setStatusMessage // Exposing this in case we need to set manual messages like "File selected"
+        setStatusMessage,
+        progress // Exportar progreso para la barra visual
     };
 };

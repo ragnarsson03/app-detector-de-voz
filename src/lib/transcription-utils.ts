@@ -1,48 +1,105 @@
 // src/lib/transcription-utils.ts
 
+import { Client } from '@gradio/client';
+
+const HUGGINGFACE_SPACE = 'xxNikoXx/whisper-asr';
+const CONNECTION_TIMEOUT = 60000; // 60 segundos
+
+// Cliente persistente (singleton) compartido
+let gradioClient: Client | null = null;
+
+async function getGradioClient(): Promise<Client> {
+    if (!gradioClient) {
+        gradioClient = await Client.connect(HUGGINGFACE_SPACE);
+    }
+    return gradioClient;
+}
+
 /**
- * Procesa el audio Blob (grabado) enviándolo al backend para su subida y transcripción.
+ * Procesa el audio Blob (grabado) enviándolo directamente a Hugging Face.
  * @param audioBlob El Blob de audio capturado por el micrófono.
  * @param fileName El nombre de archivo a usar para la subida.
+ * @param onProgress Callback opcional para reportar progreso (0-100).
  * @returns El texto de la transcripción.
  */
-export async function handleProcessAudio(audioBlob: Blob, fileName: string): Promise<string> {
-    
-    // Crear un objeto File a partir del Blob, ya que el backend espera un File/FormData
+export async function handleProcessAudio(
+    audioBlob: Blob,
+    fileName: string,
+    onProgress?: (progress: number, message: string) => void
+): Promise<string> {
+
+    // Crear un objeto File a partir del Blob para enviarlo a Gradio
     const audioFile = new File([audioBlob], fileName, { type: audioBlob.type });
 
-    // --- PASO 1: SUBIR ARCHIVO A SUPABASE (API Route /api/upload-file) ---
-    const formData = new FormData();
-    formData.append('file', audioFile);
-    
-    const uploadResponse = await fetch('/api/upload-file', {
-        method: 'POST',
-        body: formData,
-    });
+    // Timeout controller
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+        abortController.abort();
+    }, CONNECTION_TIMEOUT);
 
-    const uploadResult = await uploadResponse.json();
+    try {
+        // --- Conexión directa con Hugging Face usando Gradio Client ---
+        onProgress?.(10, 'Conectando con Hugging Face...');
+        const client = await getGradioClient();
 
-    if (!uploadResponse.ok) {
-        throw new Error(uploadResult.error || 'Fallo desconocido en la subida a Storage.');
+        onProgress?.(20, 'Enviando audio...');
+
+        // Usar submit() para obtener eventos de progreso
+        // gr.Interface espera un array con los inputs en orden
+        const job = client.submit("/predict", [audioFile]);
+
+        let transcription: string | null = null;
+
+        // Escuchar eventos de progreso
+        for await (const message of job) {
+            // Verificar timeout
+            if (abortController.signal.aborted) {
+                throw new Error('Timeout: La transcripción tardó demasiado (>60s)');
+            }
+
+            if (message.type === 'status') {
+                const stage = message.stage as string;
+                if (stage === 'pending') {
+                    onProgress?.(30, '⏳ En cola de procesamiento...');
+                } else if (stage === 'generating' || stage === 'streaming') {
+                    onProgress?.(50, '🔄 Transcribiendo audio...');
+                }
+            } else if (message.type === 'data') {
+                onProgress?.(90, '✨ Finalizando...');
+
+                try {
+                    const data = message.data;
+                    if (Array.isArray(data) && data.length > 0) {
+                        transcription = String(data[0]);
+                    } else {
+                        transcription = String(data);
+                    }
+                    console.log('[DEBUG] Transcripción (voz) extraída:', transcription);
+                } catch (e) {
+                    console.error('Error extrayendo data:', e);
+                }
+
+                // Ya tenemos la data, salir del loop
+                break;
+            }
+        }
+
+        clearTimeout(timeoutId);
+        onProgress?.(100, 'Completado');
+
+        if (!transcription) {
+            throw new Error('No se recibió transcripción del servidor de Hugging Face');
+        }
+
+        return transcription;
+    } catch (error) {
+        clearTimeout(timeoutId);
+
+        // Si es error de conexión, resetear cliente
+        if ((error as Error).message.includes('connect') || (error as Error).message.includes('Timeout')) {
+            gradioClient = null;
+        }
+
+        throw error;
     }
-    
-    const filePath = uploadResult.filePath;
-    
-    // --- PASO 2: INICIAR TRANSCRIPCIÓN (API Route /api/transcribe) ---
-    
-    const transcribeResponse = await fetch('/api/transcribe', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ filePath }), // Enviamos la ruta de Supabase
-    });
-
-    const transcribeResult = await transcribeResponse.json();
-
-    if (!transcribeResponse.ok) {
-        throw new Error(transcribeResult.error || 'Fallo en la transcripción.');
-    }
-
-    return transcribeResult.transcription;
 }
