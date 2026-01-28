@@ -217,7 +217,7 @@ export default function TranscriptionManager() {
                 {/* Columna Derecha: Salida - Minimal Dark Void */}
                 <div className="w-full md:w-3/5 p-6 md:p-10 flex flex-col bg-[#050505] relative">
                     <div className="absolute top-8 right-8 text-zinc-800 hover:text-zinc-600 transition-colors cursor-pointer">
-                        <span className="text-[10px] font-mono">v1.0.0</span>
+                        <span className="text-[10px] font-mono">v1.1</span>
                     </div>
 
                     <div className="flex items-center gap-3 mb-8">
