@@ -18,17 +18,20 @@ export default function TranscriptionManager() {
         stopRecording,
         transcribeAudio,
         isProcessing: isRecordingProcessing,
-        message: recorderMessage
+        message: recorderMessage,
+        progress: recorderProgress
     } = useAudioRecorder();
 
     const {
         uploadFile,
         isProcessing: isUploadProcessing,
-        statusMessage: uploaderMessage
+        statusMessage: uploaderMessage,
+        progress: uploaderProgress
     } = useFileUploader();
 
     const isProcessing = isRecordingProcessing || isUploadProcessing;
     const statusMessage = method === 'record' ? recorderMessage : uploaderMessage;
+    const progress = method === 'record' ? recorderProgress : uploaderProgress;
 
     // Handlers
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,6 +190,22 @@ export default function TranscriptionManager() {
                                     {isProcessing ? 'PROCESANDO...' : 'SUBIR Y TRANSCRIBIR'}
                                 </span>
                             </button>
+
+                            {/* Barra de Progreso */}
+                            {isProcessing && progress > 0 && (
+                                <div className="mt-4 animate-fadeIn">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{statusMessage}</span>
+                                        <span className="text-[10px] text-cyan-400 font-mono">{progress}%</span>
+                                    </div>
+                                    <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300 ease-out"
+                                            style={{ width: `${progress}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

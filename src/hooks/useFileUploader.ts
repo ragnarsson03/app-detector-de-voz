@@ -9,6 +9,7 @@ export const useFileUploader = () => {
     const [status, setStatus] = useState<UploadStatus>('idle');
     const [statusMessage, setStatusMessage] = useState('');
     const [transcriptionResult, setTranscriptionResult] = useState<string | null>(null);
+    const [progress, setProgress] = useState<number>(0); // 0-100
 
     const isProcessing = useMemo(() => status === 'uploading' || status === 'transcribing', [status]);
 
@@ -16,18 +17,44 @@ export const useFileUploader = () => {
         if (!file) return null;
 
         try {
+            // Reset progress
+            setProgress(0);
+
             // --- Conexión directa con Hugging Face usando Gradio Client ---
-            setStatus('transcribing');
+            setStatus('uploading');
             setStatusMessage('Conectando con Hugging Face...');
+            setProgress(10);
 
             const client = await Client.connect(HUGGINGFACE_SPACE);
+            setProgress(20);
 
-            setStatusMessage('Enviando audio para transcripción...');
+            setStatus('transcribing');
+            setStatusMessage('Enviando audio...');
 
-            // Enviar archivo directamente al endpoint /predict
-            const result = await client.predict("/predict", {
+            // Usar submit() en lugar de predict() para obtener eventos de progreso
+            const job = client.submit("/predict", {
                 audio: file
             });
+
+            // Escuchar eventos de progreso
+            for await (const message of job) {
+                if (message.type === 'status') {
+                    if (message.stage === 'pending') {
+                        setStatusMessage('⏳ En cola de procesamiento...');
+                        setProgress(30);
+                    } else if (message.stage === 'processing') {
+                        setStatusMessage('🔄 Transcribiendo audio...');
+                        setProgress(50);
+                    }
+                } else if (message.type === 'data') {
+                    setProgress(90);
+                    setStatusMessage('✨ Finalizando...');
+                }
+            }
+
+            // Obtener resultado final
+            const result = await job;
+            setProgress(100);
 
             // Extraer transcripción del resultado
             const transcription = result.data as string;
@@ -40,12 +67,17 @@ export const useFileUploader = () => {
             setStatus('success');
             setStatusMessage('¡Transcripción completada con éxito!');
             setTranscriptionResult(transcription);
+
+            // Reset progress after 1 second
+            setTimeout(() => setProgress(0), 1000);
+
             return transcription;
 
         } catch (error) {
             console.error('Error en el proceso:', error);
             setStatus('error');
             setStatusMessage(`❌ Error: ${(error as Error).message}`);
+            setProgress(0);
             return null;
         }
     }, []);
@@ -54,6 +86,7 @@ export const useFileUploader = () => {
         setStatus('idle');
         setStatusMessage('');
         setTranscriptionResult(null);
+        setProgress(0);
     }, []);
 
     return {
@@ -63,6 +96,7 @@ export const useFileUploader = () => {
         uploadFile,
         transcriptionResult,
         resetStatus,
-        setStatusMessage
+        setStatusMessage,
+        progress // Exportar progreso para la barra visual
     };
 };
