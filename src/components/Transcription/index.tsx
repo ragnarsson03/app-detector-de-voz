@@ -33,7 +33,9 @@ export default function TranscriptionManager() {
         statusMessage: uploaderMessage,
         progress: uploaderProgress,
         transcriptionResult: uploaderResult,
-        transcriptionTime: uploaderTime
+        transcriptionTime: uploaderTime,
+        cancelUpload,
+        elapsedTime
     } = useFileUploader();
 
     const isProcessing = isRecordingProcessing || isUploadProcessing;
@@ -133,6 +135,8 @@ export default function TranscriptionManager() {
                                 isProcessing={isProcessing}
                                 statusMessage={statusMessage}
                                 progress={progress}
+                                elapsedTime={method === 'upload' ? elapsedTime : 0}
+                                onCancel={method === 'upload' ? cancelUpload : undefined}
                             />
                         </div>
                     </div>
