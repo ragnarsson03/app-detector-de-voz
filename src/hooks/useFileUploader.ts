@@ -21,7 +21,10 @@ export const useFileUploader = () => {
     const [statusMessage, setStatusMessage] = useState('');
     const [transcriptionResult, setTranscriptionResult] = useState<string | null>(null);
     const [progress, setProgress] = useState<number>(0); // 0-100
+    const [transcriptionTime, setTranscriptionTime] = useState<number | null>(null);
+    const [elapsedTime, setElapsedTime] = useState<number>(0);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const isProcessing = useMemo(() => status === 'uploading' || status === 'transcribing', [status]);
 
@@ -35,14 +38,24 @@ export const useFileUploader = () => {
         }, CONNECTION_TIMEOUT);
 
         try {
+            const startTime = performance.now();
             // Reset state
             setProgress(0);
             setTranscriptionResult(null);
+            setTranscriptionTime(null);
+            setElapsedTime(0);
+
+            // Start Timer
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = setInterval(() => {
+                setElapsedTime(prev => prev + 1);
+            }, 1000);
 
             // --- Conexión directa con Hugging Face usando Gradio Client ---
             setStatus('uploading');
             setStatusMessage('Conectando con Hugging Face...');
             setProgress(10);
+
 
             console.log('[DEBUG] Conectando a Gradio Space:', HUGGINGFACE_SPACE);
             const client = await getGradioClient();
@@ -108,6 +121,11 @@ export const useFileUploader = () => {
                         setTranscriptionResult(text);
 
                         // Finalizamos visualmente
+                        const endTime = performance.now();
+                        const duration = parseFloat(((endTime - startTime) / 1000).toFixed(3));
+                        setTranscriptionTime(duration);
+                        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
                         setProgress(100);
                         setStatusMessage('✨ Finalizado');
                         setStatus('success'); // Liberar el botón inmediatamente
@@ -142,11 +160,29 @@ export const useFileUploader = () => {
                 gradioClient = null;
             }
 
-            setStatus('error');
-            setStatusMessage(`❌ Error: ${(error as Error).message}`);
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+            if (abortControllerRef.current?.signal.aborted) {
+                setStatus('idle');
+                setStatusMessage('Operación cancelada');
+            } else {
+                setStatus('error');
+                setStatusMessage(`❌ Error: ${(error as Error).message}`);
+            }
             setProgress(0);
             return null;
         }
+    }, []);
+
+    const cancelUpload = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+        }
+        setStatus('idle');
+        setStatusMessage('Cancelado por el usuario');
+        setProgress(0);
     }, []);
 
     const resetStatus = useCallback(() => {
@@ -162,8 +198,11 @@ export const useFileUploader = () => {
         isProcessing,
         uploadFile,
         transcriptionResult,
+        transcriptionTime, // <--- AÑADIDO
         resetStatus,
         setStatusMessage,
-        progress // Exportar progreso para la barra visual
+        progress, // Exportar progreso para la barra visual
+        cancelUpload,
+        elapsedTime
     };
 };

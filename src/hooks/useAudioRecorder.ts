@@ -3,16 +3,24 @@ import { handleProcessAudio } from '@/lib/transcription-utils';
 
 export const useAudioRecorder = () => {
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-    const [isRecording, setIsRecording] = useState(false);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [message, setMessage] = useState('Presiona el micrófono para grabar.');
-    const [progress, setProgress] = useState<number>(0); // 0-100
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
+    const [status, setStatus] = useState<'idle' | 'recording' | 'processing' | 'success' | 'error'>('idle');
+    const [message, setMessage] = useState('');
+    const [progress, setProgress] = useState(0);
+    const [transcriptionResult, setTranscriptionResult] = useState<string | null>(null);
+    const [transcriptionTime, setTranscriptionTime] = useState<number | null>(null);
+
+    const isRecording = status === 'recording';
+    const isProcessing = status === 'processing';
+
     const startRecording = useCallback(async (onStart?: () => void, onError?: (err: unknown) => void) => {
-        if (isProcessing) return;
+        if (status === 'processing') return; // Use status instead of isProcessing
         setAudioBlob(null); // Clear previous recording
+        setTranscriptionResult(null); // Clear previous transcription
+        setTranscriptionTime(null); // Clear previous transcription time
+        setStatus('recording'); // Set status to recording
 
         try {
             setMessage('Solicitando acceso al micrófono...');
@@ -33,63 +41,75 @@ export const useAudioRecorder = () => {
                 audioChunksRef.current = [];
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
                 setMessage('Audio capturado. Listo para transcribir.');
+                setStatus('idle'); // Back to idle after recording stops
             };
 
             mediaRecorderRef.current = mediaRecorder;
             mediaRecorder.start();
-            setIsRecording(true);
+
             setMessage('🔴 Grabando... Haz clic en el botón para detener.');
             if (onStart) onStart();
 
         } catch (err) {
             console.error('Error al acceder al micrófono:', err);
             setMessage('❌ Error: Acceso al micrófono denegado. Revisa los permisos.');
-            setIsRecording(false);
+            setStatus('error');
             if (onError) onError(err);
         }
-    }, [isProcessing]);
+    }, [status]); // Depend on status
 
     const stopRecording = useCallback(() => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             mediaRecorderRef.current.stop();
-            setIsRecording(false);
         }
-    }, []);
+    }, [isRecording]);
 
     const transcribeAudio = useCallback(async (blob: Blob): Promise<string | null> => {
-        setIsProcessing(true);
-        setProgress(0);
-        setMessage('Preparando audio...');
-
         try {
-            const transcription = await handleProcessAudio(
+            setStatus('processing');
+            setMessage('Procesando audio...');
+            setProgress(0);
+            setTranscriptionTime(null);
+            setTranscriptionResult(null);
+
+            const result = await handleProcessAudio(
                 blob,
-                'audio.webm',
-                (progressValue, progressMessage) => {
-                    setProgress(progressValue);
-                    setMessage(progressMessage);
+                `recording_${Date.now()}.wav`,
+                (p, m) => {
+                    setProgress(p);
+                    setMessage(m);
                 }
             );
 
-            setMessage('✅ Transcripción completada.');
-            setTimeout(() => setProgress(0), 1000);
-            return transcription;
-        } catch (error) {
-            const errMsg = error instanceof Error ? error.message : 'Error desconocido';
-            setMessage(`❌ Error al transcribir: ${errMsg}`);
+            if (result) {
+                setTranscriptionResult(result.text);
+                setTranscriptionTime(result.duration);
+                setStatus('success');
+                setMessage('¡Transcripción completada!');
+                setTimeout(() => setProgress(0), 1000);
+                return result.text;
+            }
+            setStatus('error'); // If result is null, it's an error
+            setMessage('❌ Error: No se pudo obtener la transcripción.');
             setProgress(0);
             return null;
-        } finally {
-            setIsProcessing(false);
+        } catch (error) {
+            setStatus('error');
+            setMessage(`❌ Error: ${(error as Error).message}`);
+            setProgress(0);
+            return null;
         }
     }, []);
 
     return {
         isRecording,
         isProcessing,
+        status,
         message,
         audioBlob,
-        progress, // Exportar progreso
+        progress,
+        transcriptionResult,
+        transcriptionTime,
         startRecording,
         stopRecording,
         transcribeAudio
