@@ -26,7 +26,7 @@ export async function handleProcessAudio(
     audioBlob: Blob,
     fileName: string,
     onProgress?: (progress: number, message: string) => void
-): Promise<string> {
+): Promise<{ text: string; duration: number } | null> {
 
     // Crear un objeto File a partir del Blob para enviarlo a Gradio
     const audioFile = new File([audioBlob], fileName, { type: audioBlob.type });
@@ -38,6 +38,7 @@ export async function handleProcessAudio(
     }, CONNECTION_TIMEOUT);
 
     try {
+        const startTime = performance.now();
         // --- Conexión directa con Hugging Face usando Gradio Client ---
         onProgress?.(10, 'Conectando con Hugging Face...');
         const client = await getGradioClient();
@@ -87,11 +88,10 @@ export async function handleProcessAudio(
         clearTimeout(timeoutId);
         onProgress?.(100, 'Completado');
 
-        if (!transcription) {
-            throw new Error('No se recibió transcripción del servidor de Hugging Face');
-        }
+        const endTime = performance.now();
+        const duration = parseFloat(((endTime - startTime) / 1000).toFixed(3));
 
-        return transcription;
+        return { text: transcription || "", duration };
     } catch (error) {
         clearTimeout(timeoutId);
 

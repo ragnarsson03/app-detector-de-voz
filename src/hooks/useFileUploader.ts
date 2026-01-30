@@ -21,6 +21,7 @@ export const useFileUploader = () => {
     const [statusMessage, setStatusMessage] = useState('');
     const [transcriptionResult, setTranscriptionResult] = useState<string | null>(null);
     const [progress, setProgress] = useState<number>(0); // 0-100
+    const [transcriptionTime, setTranscriptionTime] = useState<number | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
 
     const isProcessing = useMemo(() => status === 'uploading' || status === 'transcribing', [status]);
@@ -35,14 +36,17 @@ export const useFileUploader = () => {
         }, CONNECTION_TIMEOUT);
 
         try {
+            const startTime = performance.now();
             // Reset state
             setProgress(0);
             setTranscriptionResult(null);
+            setTranscriptionTime(null);
 
             // --- Conexión directa con Hugging Face usando Gradio Client ---
             setStatus('uploading');
             setStatusMessage('Conectando con Hugging Face...');
             setProgress(10);
+
 
             console.log('[DEBUG] Conectando a Gradio Space:', HUGGINGFACE_SPACE);
             const client = await getGradioClient();
@@ -108,6 +112,10 @@ export const useFileUploader = () => {
                         setTranscriptionResult(text);
 
                         // Finalizamos visualmente
+                        const endTime = performance.now();
+                        const duration = parseFloat(((endTime - startTime) / 1000).toFixed(3));
+                        setTranscriptionTime(duration);
+
                         setProgress(100);
                         setStatusMessage('✨ Finalizado');
                         setStatus('success'); // Liberar el botón inmediatamente
@@ -162,6 +170,7 @@ export const useFileUploader = () => {
         isProcessing,
         uploadFile,
         transcriptionResult,
+        transcriptionTime, // <--- AÑADIDO
         resetStatus,
         setStatusMessage,
         progress // Exportar progreso para la barra visual
