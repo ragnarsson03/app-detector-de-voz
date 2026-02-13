@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 
@@ -16,7 +17,10 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} h-full`}>
-            <body className="h-full w-full">{children}</body>
+            <body className="h-full w-full">
+                {children}
+                <Analytics />
+            </body>
         </html>
     );
 }
