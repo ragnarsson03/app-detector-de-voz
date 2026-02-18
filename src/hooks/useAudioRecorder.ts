@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { handleProcessAudio } from '@/lib/transcription-utils';
+import { saveVoiceLog } from '@/lib/save-log';
 
 export const useAudioRecorder = () => {
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -82,10 +83,17 @@ export const useAudioRecorder = () => {
             );
 
             if (result) {
+                // Guardar log en Supabase
+                await saveVoiceLog({
+                    duration: result.duration,
+                    transcript: result.text,
+                    label: 'Grabación de micrófono',
+                });
+
                 setTranscriptionResult(result.text);
                 setTranscriptionTime(result.duration);
                 setStatus('success');
-                setMessage('¡Transcripción completada!');
+                setMessage('¡Transcripción completada y guardada!');
                 setTimeout(() => setProgress(0), 1000);
                 return result.text;
             }
