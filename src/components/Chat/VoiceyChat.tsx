@@ -37,7 +37,15 @@ export default function VoiceyChat() {
     const [inputValue, setInputValue] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const { messages, sendMessage, status, error } = useChat({});
+    const { messages, sendMessage, status, error } = useChat({
+        onResponse: (response) => {
+            console.log('[VoiceyChat] 📥 Respuesta del servidor recibida:', response);
+            console.log('[VoiceyChat] Status:', response.status, response.statusText);
+        },
+        onError: (err) => {
+            console.error('[VoiceyChat] ❌ Error en el chat:', err);
+        }
+    });
 
     const isStreaming = status === 'streaming' || status === 'submitted';
 
@@ -138,8 +146,8 @@ export default function VoiceyChat() {
                                         </div>
                                     )}
                                     <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${msg.role === 'user'
-                                            ? 'bg-cyan-600/20 text-cyan-100 border border-cyan-500/10 rounded-tr-sm'
-                                            : 'bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 rounded-tl-sm'
+                                        ? 'bg-cyan-600/20 text-cyan-100 border border-cyan-500/10 rounded-tr-sm'
+                                        : 'bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 rounded-tl-sm'
                                         }`}>
                                         {text}
                                     </div>

@@ -41,8 +41,8 @@ export async function POST(req: Request) {
             }
         });
 
-        console.log('[Chat API] Retornando stream response.');
-        return result.toTextStreamResponse();
+        console.log('[Chat API] Retornando data stream response.');
+        return result.toDataStreamResponse();
     } catch (error) {
         console.error('[Chat API] ❌ Error CRÍTICO en /api/chat:', error);
         return new Response(JSON.stringify({ error: 'Error interno del servidor' }), {
