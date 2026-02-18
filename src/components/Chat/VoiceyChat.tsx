@@ -1,61 +1,48 @@
 /**
- * VoiceyChat — Componente de Chat Flotante
- * 
- * Asistente IA que flota en la esquina inferior derecha.
- * Usa useChat de @ai-sdk/react v3 para streaming de respuestas.
- * Conecta con /api/chat que tiene tools de Supabase.
- * 
- * API v3: useChat devuelve { messages, sendMessage, status, error }.
- * El input se maneja con estado local de React.
- * Los mensajes usan .parts[] en lugar de .content.
+ * VoiceyChat — Orquestador del Chat Flotante
+ *
+ * Responsabilidades:
+ * - Gestionar el estado del panel (abierto/cerrado) y el input
+ * - Conectar con /api/chat via useChat de @ai-sdk/react
+ * - Componer los sub-componentes de parts/
+ * - Detectar tool activa en el último mensaje para el indicador de carga
  */
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useChat } from '@ai-sdk/react';
-import { MessageCircle, X, Send, Bot, User, Loader2 } from 'lucide-react';
+import { Bot, Loader2 } from 'lucide-react';
 
-/**
- * Extraer texto legible de un UIMessage de ai@6.x.
- * Los mensajes usan .parts[] con tipos: 'text', 'tool-invocation', 'tool-result', etc.
- */
-function getMessageText(msg: any): string {
-    // 1. Leer .parts[] — formato principal en ai@6.x
-    if (Array.isArray(msg.parts) && msg.parts.length > 0) {
-        const text = msg.parts
-            .filter((p: any) => p.type === 'text' && typeof p.text === 'string')
-            .map((p: any) => p.text as string)
-            .join('');
-        if (text) return text;
-    }
-    // 2. Fallback: .content como string
-    if (typeof msg.content === 'string' && msg.content) return msg.content;
-    // 3. Fallback: .content como array (formato CoreMessage)
-    if (Array.isArray(msg.content)) {
-        return msg.content
-            .filter((c: any) => c.type === 'text')
-            .map((c: any) => c.text as string)
-            .join('');
-    }
-    return '';
+import ChatTrigger from './parts/ChatTrigger';
+import ChatHeader from './parts/ChatHeader';
+import MessageBubble from './parts/MessageBubble';
+import ChatInput from './parts/ChatInput';
+import { TOOL_STATUS_LABELS } from './parts/types';
+import type { UIMessage, ToolInvocationPart, ToolName } from './parts/types';
+
+// ─── Helper: label de tool activa en el último mensaje del assistant ──────
+
+function getStreamingLabel(messages: UIMessage[]): string {
+    const lastMsg = [...messages].reverse().find((m) => m.role === 'assistant');
+    if (!lastMsg || !Array.isArray(lastMsg.parts)) return 'Analizando...';
+
+    const activeTool = lastMsg.parts.find(
+        (p): p is ToolInvocationPart =>
+            p.type === 'tool-invocation' &&
+            ((p as ToolInvocationPart).toolInvocation?.state === 'call' ||
+                (p as ToolInvocationPart).toolInvocation?.state === 'partial-call')
+    );
+
+    if (!activeTool) return 'Analizando...';
+    const name = activeTool.toolInvocation.toolName as ToolName;
+    return TOOL_STATUS_LABELS[name] ?? '🤖 Procesando...';
 }
 
-/**
- * Obtener estado de herramientas para mostrar feedback visual.
- */
-function getToolCallStatus(msg: any): string | null {
-    if (!Array.isArray(msg.parts)) return null;
-    const toolPart = msg.parts.find((p: any) => p.type === 'tool-invocation');
-    if (!toolPart) return null;
+// ─── Sugerencias de inicio ────────────────────────────────────────────────
 
-    const toolName = toolPart.toolInvocation.toolName;
-    switch (toolName) {
-        case 'get_audio_stats': return '📊 Consultando estadísticas...';
-        case 'get_recent_logs': return '🗄️ Buscando registros...';
-        case 'control_detector': return '⚙️ Ajustando detector...';
-        default: return '🤖 Procesando...';
-    }
-}
+const SUGGESTIONS = ['¿Cuál fue el audio más largo?', 'Dame un resumen', 'Últimos 5 registros'];
+
+// ─── Componente principal ─────────────────────────────────────────────────
 
 export default function VoiceyChat() {
     const [isOpen, setIsOpen] = useState(false);
@@ -63,14 +50,13 @@ export default function VoiceyChat() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const { messages, sendMessage, status, error } = useChat({
-        onError: (err) => {
-            console.error('[VoiceyChat] ❌ Error en el chat:', err);
-        }
+        onError: (err) => console.error('[VoiceyChat] ❌ Error:', err),
     });
 
     const isStreaming = status === 'streaming' || status === 'submitted';
+    const streamingLabel = isStreaming ? getStreamingLabel(messages as UIMessage[]) : '';
 
-    // Auto-scroll al final cuando llegan mensajes nuevos
+    // Auto-scroll al último mensaje
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -82,53 +68,21 @@ export default function VoiceyChat() {
         setInputValue('');
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-        }
-    };
-
     return (
         <>
-            {/* ===== Botón flotante (Burbuja) ===== */}
-            {!isOpen && (
-                <button
-                    onClick={() => setIsOpen(true)}
-                    className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 text-white shadow-[0_0_25px_rgba(34,211,238,0.4)] hover:shadow-[0_0_35px_rgba(34,211,238,0.6)] transition-all duration-300 flex items-center justify-center group hover:scale-105"
-                    aria-label="Abrir asistente Voicey"
-                >
-                    <MessageCircle size={24} className="group-hover:rotate-12 transition-transform" />
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-black animate-pulse"></span>
-                </button>
-            )}
+            {/* Burbuja flotante */}
+            {!isOpen && <ChatTrigger onClick={() => setIsOpen(true)} />}
 
-            {/* ===== Panel de Chat ===== */}
+            {/* Panel de chat */}
             {isOpen && (
                 <div className="fixed bottom-6 right-6 z-50 w-[380px] h-[520px] bg-[#0a0a0a] border border-zinc-800 rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden animate-fadeIn">
 
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-[#050505]">
-                        <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center">
-                                <Bot size={14} className="text-white" />
-                            </div>
-                            <div>
-                                <h3 className="text-xs font-black text-zinc-200 uppercase tracking-wider">Voicey</h3>
-                                <p className="text-[9px] text-cyan-500/70">Asistente de Audio IA</p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => setIsOpen(false)}
-                            className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded hover:bg-zinc-800"
-                        >
-                            <X size={16} />
-                        </button>
-                    </div>
+                    <ChatHeader onClose={() => setIsOpen(false)} isStreaming={isStreaming} />
 
-                    {/* Mensajes */}
+                    {/* Área de mensajes */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800">
-                        {/* Mensaje de bienvenida si no hay mensajes */}
+
+                        {/* Pantalla de bienvenida */}
                         {messages.length === 0 && (
                             <div className="text-center py-8 space-y-3">
                                 <div className="w-12 h-12 mx-auto rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
@@ -141,7 +95,7 @@ export default function VoiceyChat() {
                                 <div className="space-y-1.5">
                                     <p className="text-[10px] text-zinc-600 uppercase tracking-wider font-bold">Prueba preguntar:</p>
                                     <div className="flex flex-wrap gap-1.5 justify-center">
-                                        {['¿Cuál fue el audio más largo?', 'Dame un resumen', 'Últimos 5 registros'].map((q) => (
+                                        {SUGGESTIONS.map((q) => (
                                             <button
                                                 key={q}
                                                 onClick={() => setInputValue(q)}
@@ -156,42 +110,11 @@ export default function VoiceyChat() {
                         )}
 
                         {/* Lista de mensajes */}
-                        {messages.map((msg) => {
-                            const text = getMessageText(msg);
-                            // Loguear para debug (solo en dev)
-                            if (process.env.NODE_ENV === 'development') {
-                                console.log('[VoiceyChat] msg:', msg.role, '| parts:', JSON.stringify(msg.parts)?.slice(0, 120), '| text:', text);
-                            }
-                            // Mostrar texto del mensaje, o estado de tool si está ejecutando
-                            const toolStatus = getToolCallStatus(msg);
-                            const displayText = text || toolStatus || (msg.role === 'assistant' ? '...' : '');
+                        {(messages as UIMessage[]).map((msg) => (
+                            <MessageBubble key={msg.id} message={msg} />
+                        ))}
 
-                            if (!displayText) return null;
-                            return (
-                                <div key={msg.id} className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    {msg.role === 'assistant' && (
-                                        <div className="w-6 h-6 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                            <Bot size={12} className="text-cyan-400" />
-                                        </div>
-                                    )}
-                                    <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${msg.role === 'user'
-                                        ? 'bg-cyan-600/20 text-cyan-100 border border-cyan-500/10 rounded-tr-sm'
-                                        : 'bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 rounded-tl-sm'
-                                        }`}>
-                                        {displayText}
-                                        {/* Mostrar indicador de carga extra si hay una tool ejecutándose pero ya hay texto (raro pero posible) */}
-                                        {toolStatus && text && <span className="block text-[10px] opacity-50 mt-1 italic">{toolStatus}</span>}
-                                    </div>
-                                    {msg.role === 'user' && (
-                                        <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                            <User size={12} className="text-zinc-300" />
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-
-                        {/* Indicador de carga */}
+                        {/* Indicador de carga descriptivo */}
                         {isStreaming && (
                             <div className="flex gap-2.5 items-center">
                                 <div className="w-6 h-6 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0">
@@ -199,7 +122,7 @@ export default function VoiceyChat() {
                                 </div>
                                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
                                     <Loader2 size={12} className="text-cyan-400 animate-spin" />
-                                    <span className="text-[10px] text-zinc-500">Analizando...</span>
+                                    <span className="text-[10px] text-zinc-400">{streamingLabel}</span>
                                 </div>
                             </div>
                         )}
@@ -214,24 +137,12 @@ export default function VoiceyChat() {
                         <div ref={messagesEndRef} />
                     </div>
 
-                    {/* Input */}
-                    <div className="p-3 border-t border-zinc-800 bg-[#050505] flex items-center gap-2">
-                        <input
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Pregunta sobre tus audios..."
-                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-2.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/10 transition-all"
-                            disabled={isStreaming}
-                        />
-                        <button
-                            onClick={handleSend}
-                            disabled={isStreaming || !inputValue.trim()}
-                            className="w-9 h-9 rounded-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white flex items-center justify-center transition-all duration-200 flex-shrink-0"
-                        >
-                            <Send size={14} />
-                        </button>
-                    </div>
+                    <ChatInput
+                        value={inputValue}
+                        onChange={setInputValue}
+                        onSend={handleSend}
+                        disabled={isStreaming}
+                    />
                 </div>
             )}
         </>
