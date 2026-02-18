@@ -77,6 +77,8 @@ export default function VoiceyChat() {
     const handleSend = () => {
         const text = inputValue.trim();
         if (!text || isStreaming) return;
+        // DEBUG: confirmar que el historial existe antes de enviar
+        console.log(`[VoiceyChat] Enviando mensaje. Historial actual: ${messages.length} mensajes`);
         sendMessage({ text });
         setInputValue('');
     };

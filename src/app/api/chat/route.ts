@@ -1,4 +1,4 @@
-import { streamText, convertToModelMessages } from 'ai';
+import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { createGroq } from '@ai-sdk/groq';
 import { SYSTEM_PROMPT } from './systemPrompt';
 import { requestTools } from './tools';
@@ -12,7 +12,10 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         const messages = body.messages ?? [];
-        console.log(`[Chat API] POST recibido. Mensajes: ${messages.length}`);
+        console.log(`[Chat API] POST recibido. Mensajes RAW del frontend: ${messages.length}`);
+        if (messages.length > 0) {
+            console.log('[Chat API] Roles recibidos:', messages.map((m: any) => m.role).join(', '));
+        }
 
         // Log de diagnóstico: ver estructura del último mensaje
         if (messages.length > 0) {
@@ -50,9 +53,8 @@ export async function POST(req: Request) {
             system: SYSTEM_PROMPT,
             messages: coreMessages,
             tools: requestTools,
-            toolChoice: 'auto', // Permite que el modelo decida si usar tool o responder texto
-            // @ts-ignore — maxSteps es válido en runtime (ai@6.x)
-            maxSteps: 5,
+            toolChoice: 'auto',
+            stopWhen: stepCountIs(10), // ai@6.x: reemplaza maxSteps. Permite ciclo: tool-call → tool-result → texto
             onStepFinish: (step: any) => {
                 // Log crítico: ver qué pasa en cada paso del ciclo multi-step
                 console.log('[Chat API] 📍 Paso completado:',
