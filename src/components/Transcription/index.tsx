@@ -90,6 +90,11 @@ export default function TranscriptionManager() {
                     style={{ textShadow: '0 0 40px rgba(6,182,212,0.4), 0 0 10px rgba(6,182,212,0.8)' }}>
                     DETECTOR DE VOZ A TEXTO
                 </h1>
+                <div className="inline-block px-6 py-2 rounded-full border border-cyan-500/20 bg-cyan-500/5 backdrop-blur-sm mb-2 animate-pulse shadow-[0_0_15px_rgba(34,211,238,0.1)]">
+                    <p className="text-cyan-400 text-[9px] md:text-[11px] font-black uppercase tracking-[0.4em] drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]">
+                        &lt; SISTEMA EN DESARROLLO / ALPHA &gt;
+                    </p>
+                </div>
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-24 bg-cyan-500/10 blur-[100px] -z-10 rounded-full pointer-events-none"></div>
             </header>
 
