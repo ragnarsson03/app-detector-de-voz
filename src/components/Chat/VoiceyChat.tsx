@@ -40,6 +40,23 @@ function getMessageText(msg: any): string {
     return '';
 }
 
+/**
+ * Obtener estado de herramientas para mostrar feedback visual.
+ */
+function getToolCallStatus(msg: any): string | null {
+    if (!Array.isArray(msg.parts)) return null;
+    const toolPart = msg.parts.find((p: any) => p.type === 'tool-invocation');
+    if (!toolPart) return null;
+
+    const toolName = toolPart.toolInvocation.toolName;
+    switch (toolName) {
+        case 'get_audio_stats': return '📊 Consultando estadísticas...';
+        case 'get_recent_logs': return '🗄️ Buscando registros...';
+        case 'control_detector': return '⚙️ Ajustando detector...';
+        default: return '🤖 Procesando...';
+    }
+}
+
 export default function VoiceyChat() {
     const [isOpen, setIsOpen] = useState(false);
     const [inputValue, setInputValue] = useState('');
@@ -145,8 +162,10 @@ export default function VoiceyChat() {
                             if (process.env.NODE_ENV === 'development') {
                                 console.log('[VoiceyChat] msg:', msg.role, '| parts:', JSON.stringify(msg.parts)?.slice(0, 120), '| text:', text);
                             }
-                            // Mostrar mensajes con texto; para el asistente sin texto aún, mostrar placeholder
-                            const displayText = text || (msg.role === 'assistant' ? '...' : '');
+                            // Mostrar texto del mensaje, o estado de tool si está ejecutando
+                            const toolStatus = getToolCallStatus(msg);
+                            const displayText = text || toolStatus || (msg.role === 'assistant' ? '...' : '');
+
                             if (!displayText) return null;
                             return (
                                 <div key={msg.id} className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -160,6 +179,8 @@ export default function VoiceyChat() {
                                         : 'bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 rounded-tl-sm'
                                         }`}>
                                         {displayText}
+                                        {/* Mostrar indicador de carga extra si hay una tool ejecutándose pero ya hay texto (raro pero posible) */}
+                                        {toolStatus && text && <span className="block text-[10px] opacity-50 mt-1 italic">{toolStatus}</span>}
                                     </div>
                                     {msg.role === 'user' && (
                                         <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 mt-0.5">
