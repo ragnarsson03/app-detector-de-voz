@@ -24,12 +24,20 @@ export async function POST(req: Request) {
 
         console.log('[Chat API] Iniciando streamText con Groq...');
 
+        // Mapear mensajes del formato UI (parts[]) al formato CoreMessage que espera Groq
+        const coreMessages = messages.map((m: any) => ({
+            role: m.role,
+            content: typeof m.content === 'string'
+                ? m.content
+                : m.parts?.map((p: any) => p.text).join('') || '',
+        }));
+
         // En ai@6.x, streamText NO es async — retorna un objeto con métodos de stream.
         // Usar await destruye el prototipo y causa "toUIMessageStreamResponse is not a function".
         const result = streamText({
             model: groq('llama-3.3-70b-versatile'),
             system: SYSTEM_PROMPT,
-            messages,
+            messages: coreMessages,
             tools: requestTools,
             // @ts-ignore — maxSteps es válido en runtime (ai@6.x) pero falta en los tipos
             maxSteps: 5,

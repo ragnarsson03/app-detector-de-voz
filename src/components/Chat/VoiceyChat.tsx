@@ -16,19 +16,27 @@ import { useChat } from '@ai-sdk/react';
 import { MessageCircle, X, Send, Bot, User, Loader2 } from 'lucide-react';
 
 /**
- * Extraer texto legible de los "parts" de un mensaje AI SDK v3.
- * Los mensajes ya no usan .content, sino un array de .parts.
+ * Extraer texto legible de un UIMessage de ai@6.x.
+ * Los mensajes usan .parts[] con tipos: 'text', 'tool-invocation', 'tool-result', etc.
  */
-function getMessageText(msg: { parts?: Array<{ type: string; text?: string }>; content?: string }): string {
-    // Intentar leer .parts (v3)
-    if (msg.parts && msg.parts.length > 0) {
-        return msg.parts
-            .filter((p) => p.type === 'text' && p.text)
-            .map((p) => p.text)
+function getMessageText(msg: any): string {
+    // 1. Leer .parts[] — formato principal en ai@6.x
+    if (Array.isArray(msg.parts) && msg.parts.length > 0) {
+        const text = msg.parts
+            .filter((p: any) => p.type === 'text' && typeof p.text === 'string')
+            .map((p: any) => p.text as string)
+            .join('');
+        if (text) return text;
+    }
+    // 2. Fallback: .content como string
+    if (typeof msg.content === 'string' && msg.content) return msg.content;
+    // 3. Fallback: .content como array (formato CoreMessage)
+    if (Array.isArray(msg.content)) {
+        return msg.content
+            .filter((c: any) => c.type === 'text')
+            .map((c: any) => c.text as string)
             .join('');
     }
-    // Fallback a .content (compatibilidad)
-    if (typeof msg.content === 'string') return msg.content;
     return '';
 }
 
@@ -133,7 +141,13 @@ export default function VoiceyChat() {
                         {/* Lista de mensajes */}
                         {messages.map((msg) => {
                             const text = getMessageText(msg);
-                            if (!text) return null;
+                            // Loguear para debug (solo en dev)
+                            if (process.env.NODE_ENV === 'development') {
+                                console.log('[VoiceyChat] msg:', msg.role, '| parts:', JSON.stringify(msg.parts)?.slice(0, 120), '| text:', text);
+                            }
+                            // Mostrar mensajes con texto; para el asistente sin texto aún, mostrar placeholder
+                            const displayText = text || (msg.role === 'assistant' ? '...' : '');
+                            if (!displayText) return null;
                             return (
                                 <div key={msg.id} className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     {msg.role === 'assistant' && (
@@ -145,7 +159,7 @@ export default function VoiceyChat() {
                                         ? 'bg-cyan-600/20 text-cyan-100 border border-cyan-500/10 rounded-tr-sm'
                                         : 'bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 rounded-tl-sm'
                                         }`}>
-                                        {text}
+                                        {displayText}
                                     </div>
                                     {msg.role === 'user' && (
                                         <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 mt-0.5">
