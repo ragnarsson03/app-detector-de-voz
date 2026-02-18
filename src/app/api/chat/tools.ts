@@ -11,7 +11,7 @@ export const getAudioStatsTool = tool({
     parameters: z.object({
         period: z.enum(['today', 'week', 'month', 'all']).optional()
             .describe('Período de tiempo. "today"=hoy, "week"=última semana, "month"=último mes, "all"=todos.'),
-    }).default({}),
+    }).passthrough(),
     // @ts-ignore
     execute: async (args: any) => {
         console.log('[Tool: get_audio_stats] Ejecutando con args:', JSON.stringify(args));
@@ -78,7 +78,7 @@ export const getRecentLogsTool = tool({
     parameters: z.object({
         limit: z.number().min(1).max(50).optional()
             .describe('Número de registros a obtener. Máximo 50. Por defecto 10.'),
-    }).default({}),
+    }).passthrough(),
     // @ts-ignore
     execute: async (args: any) => {
         console.log('[Tool: get_recent_logs] Ejecutando con args:', JSON.stringify(args));
