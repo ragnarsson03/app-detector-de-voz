@@ -33,24 +33,33 @@ function getMessageText(msg: MessageBubbleProps['message']): string {
 }
 
 /**
- * Detecta si hay una tool-invocation activa en el mensaje y retorna su label descriptivo.
- * Distingue entre estado 'call' (en progreso) y 'result' (completado).
- * Solo muestra el label si la invocación está en estado 'call' o 'partial-call'.
+ * Detecta el estado de tool-invocation en el mensaje y retorna un label descriptivo.
+ *
+ * Estados posibles:
+ * - 'partial-call' / 'call' → la tool está ejecutándose
+ * - 'result'                → la tool terminó, la IA está generando el texto final
  */
-function getActiveToolLabel(msg: MessageBubbleProps['message']): string | null {
+function getToolLabel(msg: MessageBubbleProps['message']): { label: string; isDone: boolean } | null {
     if (!Array.isArray(msg.parts)) return null;
 
     const toolPart = msg.parts.find(
-        (p): p is ToolInvocationPart =>
-            p.type === 'tool-invocation' &&
-            ((p as ToolInvocationPart).toolInvocation?.state === 'call' ||
-                (p as ToolInvocationPart).toolInvocation?.state === 'partial-call')
-    );
+        (p): p is ToolInvocationPart => p.type === 'tool-invocation'
+    ) as ToolInvocationPart | undefined;
 
     if (!toolPart) return null;
 
+    const state = toolPart.toolInvocation?.state;
     const name = toolPart.toolInvocation.toolName as ToolName;
-    return TOOL_STATUS_LABELS[name] ?? '🤖 Procesando...';
+    const baseLabel = TOOL_STATUS_LABELS[name] ?? '🤖 Procesando...';
+
+    if (state === 'call' || state === 'partial-call') {
+        return { label: baseLabel, isDone: false };
+    }
+    if (state === 'result') {
+        // La tool terminó — la IA está procesando el resultado para generar texto
+        return { label: '✍️ Escribiendo respuesta...', isDone: true };
+    }
+    return null;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────
@@ -65,7 +74,7 @@ function getActiveToolLabel(msg: MessageBubbleProps['message']): string | null {
  */
 export default function MessageBubble({ message: msg }: MessageBubbleProps) {
     const text = getMessageText(msg);
-    const activeToolLabel = getActiveToolLabel(msg);
+    const toolInfo = getToolLabel(msg);
 
     // Debug en desarrollo
     if (process.env.NODE_ENV === 'development') {
@@ -73,13 +82,16 @@ export default function MessageBubble({ message: msg }: MessageBubbleProps) {
             '[MessageBubble]',
             msg.role,
             '| text:', text.slice(0, 60) || '(vacío)',
-            '| tool:', activeToolLabel ?? 'ninguna'
+            '| tool:', toolInfo ? `${toolInfo.label} (done=${toolInfo.isDone})` : 'ninguna'
         );
     }
 
-    // Determinar qué mostrar
-    const displayText = text || activeToolLabel;
-    if (!displayText && msg.role !== 'assistant') return null;
+    // Lógica de display:
+    // 1. Si hay texto → mostrarlo (es la respuesta final o streaming)
+    // 2. Si no hay texto pero la tool está en 'call' → label de ejecución
+    // 3. Si no hay texto pero la tool está en 'result' → "Escribiendo respuesta..."
+    // 4. Si no hay nada → no renderizar
+    const displayText = text || (toolInfo ? toolInfo.label : '');
     if (!displayText) return null;
 
     const isUser = msg.role === 'user';
@@ -96,16 +108,16 @@ export default function MessageBubble({ message: msg }: MessageBubbleProps) {
             {/* Burbuja del mensaje */}
             <div
                 className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${isUser
-                        ? 'bg-cyan-600/20 text-cyan-100 border border-cyan-500/10 rounded-tr-sm'
-                        : 'bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 rounded-tl-sm'
+                    ? 'bg-cyan-600/20 text-cyan-100 border border-cyan-500/10 rounded-tr-sm'
+                    : 'bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 rounded-tl-sm'
                     }`}
             >
                 {displayText}
 
                 {/* Badge de tool activa cuando ya hay texto (tool en paralelo con respuesta) */}
-                {activeToolLabel && text && (
+                {toolInfo && !toolInfo.isDone && text && (
                     <span className="block text-[10px] opacity-50 mt-1 italic">
-                        {activeToolLabel}
+                        {toolInfo.label}
                     </span>
                 )}
             </div>

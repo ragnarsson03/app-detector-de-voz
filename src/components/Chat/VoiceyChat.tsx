@@ -56,6 +56,19 @@ export default function VoiceyChat() {
     const isStreaming = status === 'streaming' || status === 'submitted';
     const streamingLabel = isStreaming ? getStreamingLabel(messages as UIMessage[]) : '';
 
+    // DEBUG: loguear estructura completa de mensajes en cada render
+    if (process.env.NODE_ENV === 'development') {
+        messages.forEach((m: any) => {
+            if (m.role === 'assistant') {
+                console.log('[VoiceyChat DEBUG] assistant msg:',
+                    'content=', JSON.stringify(m.content)?.slice(0, 100),
+                    '| parts=', JSON.stringify(m.parts)?.slice(0, 200)
+                );
+            }
+        });
+    }
+
+
     // Auto-scroll al último mensaje
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
