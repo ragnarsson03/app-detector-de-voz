@@ -10,7 +10,6 @@ const groq = createGroq({
 
 export async function POST(req: Request) {
     try {
-
         const { messages } = await req.json();
         console.log(`[Chat API] Recibida petición POST con ${messages.length} mensajes.`);
 
@@ -23,26 +22,28 @@ export async function POST(req: Request) {
             });
         }
 
-        // ⚠️ IMPORTANTE: 'streamText' en esta versión de 'ai' SDK parece ser ASYNC
-        // (Aunque algunas docs dicen lo contrario, el error runtime indica que retorna una Promise)
         console.log('[Chat API] Iniciando streamText con Groq...');
-        const result = await streamText({
+
+        // En ai@6.x, streamText NO es async — retorna un objeto con métodos de stream.
+        // Usar await destruye el prototipo y causa "toUIMessageStreamResponse is not a function".
+        const result = streamText({
             model: groq('llama-3.3-70b-versatile'),
             system: SYSTEM_PROMPT,
             messages,
             tools: requestTools,
-            // @ts-ignore
-            maxSteps: 5, // Permitir que el modelo ejecute herramientas y luego responda
+            // @ts-ignore — maxSteps es válido en runtime (ai@6.x) pero falta en los tipos
+            maxSteps: 5,
             onError: (err) => {
                 console.error('[Chat API] ❌ Error en streamText:', err);
             },
             onFinish: (completion) => {
                 console.log('[Chat API] ✅ Stream finalizado. Tokens usados:', completion.usage.totalTokens);
-            }
+            },
         });
 
-        console.log('[Chat API] Retornando data stream response.');
-        return result.toDataStreamResponse();
+        console.log('[Chat API] Retornando UI message stream response.');
+        return result.toUIMessageStreamResponse();
+
     } catch (error) {
         console.error('[Chat API] ❌ Error CRÍTICO en /api/chat:', error);
         return new Response(JSON.stringify({ error: 'Error interno del servidor' }), {

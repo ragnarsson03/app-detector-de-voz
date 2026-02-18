@@ -38,10 +38,6 @@ export default function VoiceyChat() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const { messages, sendMessage, status, error } = useChat({
-        onResponse: (response) => {
-            console.log('[VoiceyChat] 📥 Respuesta del servidor recibida:', response);
-            console.log('[VoiceyChat] Status:', response.status, response.statusText);
-        },
         onError: (err) => {
             console.error('[VoiceyChat] ❌ Error en el chat:', err);
         }
@@ -57,7 +53,7 @@ export default function VoiceyChat() {
     const handleSend = () => {
         const text = inputValue.trim();
         if (!text || isStreaming) return;
-        sendMessage({ role: 'user', content: text });
+        sendMessage({ text });
         setInputValue('');
     };
 
