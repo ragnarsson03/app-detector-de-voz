@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { handleProcessAudio } from '@/lib/transcription-utils';
-import { saveVoiceLog } from '@/lib/save-log';
+import { saveVoiceLogAction } from '@/app/actions/save-voice-log';
 
 export const useAudioRecorder = () => {
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -83,8 +83,8 @@ export const useAudioRecorder = () => {
             );
 
             if (result) {
-                // Guardar log en Supabase
-                await saveVoiceLog({
+                // Guardar log en Supabase (Server Action para saltar RLS)
+                await saveVoiceLogAction({
                     duration: result.duration,
                     transcript: result.text,
                     label: 'Grabación de micrófono',

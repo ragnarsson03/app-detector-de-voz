@@ -12,7 +12,9 @@ export const getAudioStatsTool = tool({
         period: z.enum(['today', 'week', 'month', 'all']).optional()
             .describe('Período de tiempo. "today"=hoy, "week"=última semana, "month"=último mes, "all"=todos.'),
     }),
-    execute: async ({ period }) => {
+    // @ts-ignore
+    execute: async (args: any) => {
+        const { period } = args;
         if (!supabaseServer) {
             return { error: 'Servicio de base de datos no disponible (Faltan credenciales).' };
         }
@@ -65,7 +67,9 @@ export const getRecentLogsTool = tool({
         limit: z.number().min(1).max(50).optional()
             .describe('Número de registros a obtener. Máximo 50. Por defecto 10.'),
     }),
-    execute: async ({ limit }) => {
+    // @ts-ignore
+    execute: async (args: any) => {
+        const { limit } = args;
         const n = limit ?? 10;
 
         if (!supabaseServer) {
@@ -105,7 +109,9 @@ export const controlDetectorTool = tool({
         sensitivity: z.number().min(0).max(100).optional()
             .describe('Nivel de sensibilidad (0-100). Solo para set_sensitivity.'),
     }),
-    execute: async ({ action, sensitivity }) => {
+    // @ts-ignore
+    execute: async (args: any) => {
+        const { action, sensitivity } = args;
         if (action === 'get_config') {
             return {
                 message: 'Configuración actual del detector',

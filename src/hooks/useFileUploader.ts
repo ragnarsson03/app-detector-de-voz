@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { Client } from '@gradio/client';
-import { saveVoiceLog } from '@/lib/save-log';
+import { saveVoiceLogAction } from '@/app/actions/save-voice-log';
 
 export type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
 
@@ -126,8 +126,8 @@ export const useFileUploader = () => {
                         const duration = parseFloat(((endTime - startTime) / 1000).toFixed(3));
                         setTranscriptionTime(duration);
 
-                        // Guardar log en Supabase
-                        await saveVoiceLog({
+                        // Guardar log en Supabase (Server Action)
+                        await saveVoiceLogAction({
                             duration: duration,
                             transcript: text,
                             label: `Archivo: ${file.name}`,
