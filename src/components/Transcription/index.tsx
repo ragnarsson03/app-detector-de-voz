@@ -5,8 +5,8 @@ import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useFileUploader } from '@/hooks/useFileUploader';
 import { MethodSelector } from './MethodSelector';
 import { AudioInputArea } from './AudioInputArea';
-import { TranscriptionResult } from './TranscriptionResult';
-import { StatusBanner } from './StatusBanner';
+import { TranscriptionProgress } from './TranscriptionProgress';
+import { TranscriptionDisplay } from './TranscriptionDisplay';
 import clsx from 'clsx';
 
 export default function TranscriptionManager() {
@@ -24,6 +24,8 @@ export default function TranscriptionManager() {
         isProcessing: isRecordingProcessing,
         message: recorderMessage,
         progress: recorderProgress,
+        volume: recorderVolume,
+        transcriptionResult: recorderResult,
         transcriptionTime: recorderTime
     } = useAudioRecorder();
 
@@ -38,44 +40,92 @@ export default function TranscriptionManager() {
         elapsedTime
     } = useFileUploader();
 
-    const isProcessing = isRecordingProcessing || isUploadProcessing;
-    const statusMessage = method === 'record' ? recorderMessage : uploaderMessage;
-    const progress = method === 'record' ? recorderProgress : uploaderProgress;
+    // Estados locales para "Hard Reset" y sincronización forzada
+    const [overrideProgress, setOverrideProgress] = useState<number | null>(null);
+    const [overrideMessage, setOverrideMessage] = useState<string | null>(null);
+
+    const isProcessing = (isRecordingProcessing || isUploadProcessing) && !result;
+    const progress = overrideProgress !== null ? overrideProgress : (method === 'record' ? recorderProgress : uploaderProgress);
+    const statusMessage = overrideMessage !== null ? overrideMessage : (method === 'record' ? recorderMessage : uploaderMessage);
     const activeTime = method === 'record' ? recorderTime : uploaderTime;
 
-    // Sincronizar resultados de los hooks con el estado local
+    // Sincronizar resultados de los hooks con el estado local y resetear overrides
     useEffect(() => {
         if (method === 'upload' && uploaderResult) {
             setResult(uploaderResult);
+            // Hard Reset para upload
+            setOverrideProgress(100);
+            setOverrideMessage("Completado");
         }
     }, [uploaderResult, method]);
+
+    useEffect(() => {
+        if (method === 'record' && recorderResult) {
+            console.log('[Hard Reset] Sincronizando resultado:', recorderResult);
+            // Hard Reset para grabación
+            setTimeout(() => {
+                setResult(recorderResult);
+                setOverrideProgress(100);
+                setOverrideMessage("Completado");
+            }, 0);
+        }
+    }, [recorderResult, method]);
 
     // Handlers
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files?.[0]) {
             setSelectedFile(e.target.files[0]);
             setResult("");
+            setOverrideProgress(null);
+            setOverrideMessage(null);
         }
     };
 
     const handleToggleRecord = async () => {
         if (isRecording) {
-            stopRecording();
+            const blob = await stopRecording();
+            if (blob) {
+                const text = await transcribeAudio(blob);
+                if (text) {
+                    setTimeout(() => {
+                        setResult(text);
+                        setOverrideProgress(100);
+                        setOverrideMessage("Completado");
+                    }, 0);
+                }
+            }
         } else {
             setResult("");
+            setOverrideProgress(null);
+            setOverrideMessage(null);
             await startRecording();
         }
     };
 
     const handleTranscribe = async () => {
+        if (isProcessing) return;
         setResult("");
-        if (method === 'upload') {
-            if (!selectedFile) return;
-            await uploadFile(selectedFile);
-        } else {
-            if (!audioBlob) return;
-            const text = await transcribeAudio(audioBlob);
-            if (text) setResult(text);
+        setOverrideProgress(null);
+        setOverrideMessage(null);
+
+        try {
+            if (method === 'upload') {
+                if (!selectedFile) return;
+                await uploadFile(selectedFile);
+            } else {
+                if (!audioBlob) return;
+                const text = await transcribeAudio(audioBlob);
+                if (text) {
+                    // Hard Reset force exit
+                    setTimeout(() => {
+                        setResult(text);
+                        setOverrideProgress(100);
+                        setOverrideMessage("Completado");
+                    }, 0);
+                }
+            }
+        } catch (error) {
+            console.error('[Transcription] Error en transcripción:', error);
         }
     };
 
@@ -95,7 +145,7 @@ export default function TranscriptionManager() {
                         &lt; SISTEMA EN DESARROLLO / ALPHA &gt;
                     </p>
                 </div>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-24 bg-cyan-500/10 blur-[100px] -z-10 rounded-full pointer-events-none"></div>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-32 bg-cyan-500/10 blur-[120px] -z-10 rounded-full pointer-events-none"></div>
             </header>
 
             <div className="bg-[#050505] border border-zinc-800 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col md:flex-row min-h-[550px] relative overflow-hidden">
@@ -115,6 +165,7 @@ export default function TranscriptionManager() {
                             method={method}
                             selectedFile={selectedFile}
                             isRecording={isRecording}
+                            volume={recorderVolume}
                             onFileSelect={handleFileSelect}
                             onToggleRecord={handleToggleRecord}
                         />
@@ -136,10 +187,11 @@ export default function TranscriptionManager() {
                                 </span>
                             </button>
 
-                            <StatusBanner
+                            <TranscriptionProgress
                                 isProcessing={isProcessing}
                                 statusMessage={statusMessage}
                                 progress={progress}
+                                hasResult={!!result}
                                 elapsedTime={method === 'upload' ? elapsedTime : 0}
                                 onCancel={method === 'upload' ? cancelUpload : undefined}
                             />
@@ -149,8 +201,8 @@ export default function TranscriptionManager() {
 
                 {/* Columna Derecha: Salida */}
                 <div className="w-full md:w-3/5 p-6 md:p-10 flex flex-col bg-[#050505] relative">
-                    <TranscriptionResult
-                        result={result}
+                    <TranscriptionDisplay
+                        text={result}
                         transcriptionTime={activeTime}
                         onCopy={handleCopy}
                     />
