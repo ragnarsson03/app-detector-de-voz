@@ -154,11 +154,15 @@ export const useAudioRecorder = () => {
             );
 
             if (result) {
-                await saveVoiceLogAction({
-                    duration: result.duration,
-                    transcript: result.text,
-                    label: 'Grabación de micrófono',
-                });
+                try {
+                    await saveVoiceLogAction({
+                        duration: result.duration,
+                        transcript: result.text,
+                        label: 'Grabación de micrófono',
+                    });
+                } catch (logError) {
+                    console.error('[useAudioRecorder] Aviso: No se pudo guardar el log en el servidor', logError);
+                }
 
                 setTranscriptionResult(result.text);
                 setTranscriptionTime(result.duration);
@@ -172,6 +176,7 @@ export const useAudioRecorder = () => {
             setProgress(0);
             return null;
         } catch (error) {
+            console.error('[useAudioRecorder] Error crítico:', error);
             setStatus('error');
             setMessage(`❌ Error: ${(error as Error).message}`);
             setProgress(0);

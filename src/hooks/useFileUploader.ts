@@ -1,21 +1,10 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { Client } from '@gradio/client';
 import { saveVoiceLogAction } from '@/app/actions/save-voice-log';
 
 export type UploadStatus = 'idle' | 'uploading' | 'transcribing' | 'success' | 'error';
+const CONNECTION_TIMEOUT = 60000;
 
-const HUGGINGFACE_SPACE = 'xxNikoXx/whisper-asr';
-const CONNECTION_TIMEOUT = 60000; // 60 segundos
-
-// Cliente persistente (singleton) para evitar reconexiones
-let gradioClient: Client | null = null;
-
-async function getGradioClient(): Promise<Client> {
-    if (!gradioClient) {
-        gradioClient = await Client.connect(HUGGINGFACE_SPACE);
-    }
-    return gradioClient;
-}
+// Hugging Face logic has been removed to switch to Groq API via our backend server.
 
 export const useFileUploader = () => {
     const [status, setStatus] = useState<UploadStatus>('idle');
@@ -52,122 +41,66 @@ export const useFileUploader = () => {
                 setElapsedTime(prev => prev + 1);
             }, 1000);
 
-            // --- Conexión directa con Hugging Face usando Gradio Client ---
             setStatus('uploading');
-            setStatusMessage('Conectando con Hugging Face...');
+            setStatusMessage('Preparando archivo...');
             setProgress(10);
 
-
-            console.log('[DEBUG] Conectando a Gradio Space:', HUGGINGFACE_SPACE);
-            const client = await getGradioClient();
-            console.log('[DEBUG] Cliente conectado exitosamente');
-            setProgress(20);
+            const formData = new FormData();
+            formData.append('file', file);
 
             setStatus('transcribing');
-            setStatusMessage('Enviando audio...');
+            setStatusMessage('Transcribiendo AUdio...');
+            setProgress(40);
 
-            // Usar submit() en lugar de predict() para obtener eventos de progreso
-            // gr.Interface espera un array con los inputs en orden
-            console.log('[DEBUG] Enviando archivo:', {
-                name: file.name,
-                size: file.size,
-                type: file.type
+            const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData,
+                signal: abortControllerRef.current.signal
             });
-            const job = client.submit("/predict", [file]);
-            console.log('[DEBUG] Job creado, esperando eventos...');
 
-            let transcription: string | null = null;
-
-            // Escuchar eventos de progreso
-            for await (const message of job) {
-                console.log('[DEBUG] Evento recibido:', {
-                    type: message.type,
-                    stage: message.type === 'status' ? (message as any).stage : undefined,
-                    hasData: message.type === 'data'
-                });
-
-                // Verificar si fue abortado
-                if (abortControllerRef.current?.signal.aborted) {
-                    throw new Error('Timeout: La transcripción tardó demasiado (>60s)');
-                }
-
-                if (message.type === 'status') {
-                    const stage = message.stage as string;
-                    console.log('[DEBUG] Status stage:', stage);
-                    if (stage === 'pending') {
-                        setStatusMessage('⏳ En cola de procesamiento...');
-                        setProgress(30);
-                    } else if (stage === 'generating' || stage === 'complete') {
-                        setStatusMessage('🔄 Transcribiendo audio...');
-                        setProgress(50);
-                    }
-                } else if (message.type === 'data') {
-                    console.log('[DEBUG] Data recibida RAW:', message.data);
-
-                    try {
-                        const data = message.data;
-                        let text = "";
-
-                        // Extracción segura usando String() para evitar problemas de tipos
-                        if (Array.isArray(data) && data.length > 0) {
-                            text = String(data[0]);
-                        } else {
-                            text = String(data);
-                        }
-
-                        console.log('[DEBUG] Texto extraído con éxito:', text);
-
-                        // Guardamos en variable local y actualizamos ESTADO INMEDIATAMENTE
-                        transcription = text;
-                        setTranscriptionResult(text);
-
-                        // Finalizamos visualmente
-                        const endTime = performance.now();
-                        const duration = parseFloat(((endTime - startTime) / 1000).toFixed(3));
-                        setTranscriptionTime(duration);
-
-                        // Guardar log en Supabase (Server Action)
-                        await saveVoiceLogAction({
-                            duration: duration,
-                            transcript: text,
-                            label: `Archivo: ${file.name}`,
-                        });
-
-                        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-
-                        setProgress(100);
-                        setStatusMessage('✨ Finalizado y guardado');
-                        setStatus('success'); // Liberar el botón inmediatamente
-
-                        // Limpiar timeout
-                        clearTimeout(timeoutId);
-
-                        // Reset visual retardado
-                        setTimeout(() => {
-                            setProgress(0);
-                            setStatus('idle');
-                        }, 2000);
-
-                        return text; // Salir de la función directamente
-
-                    } catch (err) {
-                        console.error('[DEBUG] Error fatal al procesar data:', err);
-                        throw err;
-                    }
-                }
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Fallo en la transcripción');
             }
 
-            // Si llegamos aquí sin haber retornado, algo falló
-            throw new Error('El proceso terminó sin recibir datos finales');
+            setProgress(80);
+            setStatusMessage('Procesando resultados...');
+
+            const data = await response.json();
+            const text = data.text || "";
+
+            console.log('[DEBUG] Texto extraído con Groq:', text);
+
+            // Guardamos en variable local y actualizamos ESTADO INMEDIATAMENTE
+            setTranscriptionResult(text);
+
+            // Finalizamos visualmente
+            const endTime = performance.now();
+            const duration = parseFloat(((endTime - startTime) / 1000).toFixed(3));
+            setTranscriptionTime(duration);
+
+            // Guardar log en Supabase (Server Action) - No bloquear si falla
+            try {
+                await saveVoiceLogAction({
+                    duration: duration,
+                    transcript: text,
+                    label: `Archivo: ${file.name}`,
+                });
+            } catch (logErr) {
+                console.error('[useFileUploader] Aviso: No se pudo guardar el log en el servidor', logErr);
+            }
+
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+            setProgress(100);
+            setStatusMessage('✨ Finalizado y guardado');
+            setStatus('success'); // Liberar el botón inmediatamente
+
+            return text; // Salir de la función directamente
 
         } catch (error) {
             clearTimeout(timeoutId);
             console.error('Error en el proceso:', error);
-
-            // Si es error de conexión, resetear cliente para reconectar
-            if ((error as Error).message.includes('connect') || (error as Error).message.includes('Timeout')) {
-                gradioClient = null;
-            }
 
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
             if (abortControllerRef.current?.signal.aborted) {
