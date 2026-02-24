@@ -1,15 +1,16 @@
-import React from 'react';
-import { FileText, Zap, Copy, ThumbsUp } from 'lucide-react';
-import clsx from 'clsx';
+'use client';
 
-interface TranscriptionResultProps {
-    result: string;
+import React, { useEffect, useState } from 'react';
+import { FileText, Copy } from 'lucide-react';
+
+interface TranscriptionDisplayProps {
+    text: string;
     transcriptionTime: number | null;
     onCopy: () => void;
 }
 
-export const TranscriptionResult: React.FC<TranscriptionResultProps> = ({
-    result,
+export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
+    text,
     transcriptionTime,
     onCopy
 }) => {
@@ -33,12 +34,12 @@ export const TranscriptionResult: React.FC<TranscriptionResultProps> = ({
             <div className="flex-1 p-6 relative overflow-hidden flex flex-col">
                 <textarea
                     readOnly
-                    value={result}
-                    placeholder="El texto aparecerá aquí..."
+                    value={text}
+                    placeholder={!text ? "El texto aparecerá aquí..." : ""}
                     className="flex-1 w-full bg-transparent border-none focus:ring-0 text-zinc-300 text-sm leading-relaxed resize-none scroll-smooth placeholder:text-zinc-800 placeholder:italic"
                 />
 
-                {result && (
+                {text && (
                     <div className="mt-4 flex justify-between items-center animate-fadeIn">
                         <div className="flex gap-4">
                             <button

@@ -4,13 +4,16 @@ import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import clsx from 'clsx';
 
 const Recorder = ({ setTranscription }: { setTranscription: (text: string) => void }) => {
-    // Usamos el hook personalizado
-    const { isRecording, isProcessing, message, startRecording, stopRecording } = useAudioRecorder();
+    // Usamos el hook personalizado con las nuevas métricas
+    const { isRecording, isProcessing, message, volume, startRecording, stopRecording, transcribeAudio } = useAudioRecorder();
 
     const handleToggleRecording = async () => {
         if (isRecording) {
-            const text = await stopRecording();
-
+            const blob = await stopRecording();
+            if (blob) {
+                const text = await transcribeAudio(blob);
+                if (text) setTranscription(text);
+            }
         } else {
             await startRecording();
         }
@@ -39,7 +42,7 @@ const Recorder = ({ setTranscription }: { setTranscription: (text: string) => vo
                 )}
             </div>
 
-            {/* Botón Principal - Minimalista */}
+            {/* Botón Principal - Con visualización de volumen en tiempo real */}
             <button
                 onClick={handleToggleRecording}
                 disabled={isProcessing}
@@ -50,12 +53,24 @@ const Recorder = ({ setTranscription }: { setTranscription: (text: string) => vo
                         : 'bg-white hover:bg-neutral-200 hover:scale-105 hover:shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)]',
                     isProcessing && 'opacity-50 cursor-not-allowed scale-95 bg-neutral-700'
                 )}
+                style={{
+                    // El volumen 0-100 se usa para expandir la sombra exterior
+                    boxShadow: isRecording ? `0 0 ${20 + (volume / 2)}px rgba(239, 68, 68, ${0.4 + (volume / 200)})` : undefined
+                }}
                 aria-label={isRecording ? "Detener grabación" : "Iniciar grabación"}
             >
                 <i className={clsx(
                     "fas fa-microphone text-3xl transition-colors duration-300",
                     isRecording ? "text-white" : "text-black group-hover:text-black/80"
                 )}></i>
+
+                {/* Feedback visual de volumen (anillo dinámico) */}
+                {isRecording && (
+                    <span
+                        className="absolute inset-x-[-10px] inset-y-[-10px] rounded-full border-2 border-red-500/30 transition-transform duration-100 ease-linear"
+                        style={{ transform: `scale(${1 + (volume / 200)})`, opacity: 0.1 + (volume / 100) }}
+                    ></span>
+                )}
 
                 {/* Anillos decorativos sutiles en hover cuando no graba */}
                 {!isRecording && !isProcessing && (
@@ -69,7 +84,10 @@ const Recorder = ({ setTranscription }: { setTranscription: (text: string) => vo
 
             {/* Mensaje de error o estado secundario */}
             {message && (
-                <p className="mt-4 text-xs font-medium text-red-400 text-center max-w-xs animate-fadeIn">
+                <p className={clsx(
+                    "mt-4 text-[10px] font-medium text-center max-w-xs animate-fadeIn uppercase tracking-tighter",
+                    message.includes('❌') ? "text-red-400" : "text-cyan-400/80"
+                )}>
                     {message}
                 </p>
             )}

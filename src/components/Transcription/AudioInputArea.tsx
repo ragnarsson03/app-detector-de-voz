@@ -6,6 +6,7 @@ interface AudioInputAreaProps {
     method: 'upload' | 'record';
     selectedFile: File | null;
     isRecording: boolean;
+    volume?: number; // Nueva prop para métricas
     onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onToggleRecord: () => void;
 }
@@ -14,6 +15,7 @@ export const AudioInputArea: React.FC<AudioInputAreaProps> = ({
     method,
     selectedFile,
     isRecording,
+    volume = 0,
     onFileSelect,
     onToggleRecord
 }) => {
@@ -54,8 +56,29 @@ export const AudioInputArea: React.FC<AudioInputAreaProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="h-48 flex items-center justify-center bg-[#0a0a0a] rounded-3xl border border-zinc-800 relative overflow-hidden animate-fadeIn">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/10 to-transparent opacity-0 transition-opacity duration-500" style={{ opacity: isRecording ? 1 : 0 }}></div>
+                <div className="h-48 flex items-center justify-center bg-[#0a0a0a] rounded-3xl border border-zinc-800 relative overflow-hidden animate-fadeIn transition-colors duration-500"
+                    style={{
+                        borderColor: isRecording ? `rgba(239, 68, 68, ${0.1 + (volume / 200)})` : undefined,
+                        boxShadow: isRecording ? `inset 0 0 ${10 + (volume / 4)}px rgba(239, 68, 68, 0.05)` : undefined
+                    }}
+                >
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-500/5 to-transparent opacity-0 transition-opacity duration-300"
+                        style={{
+                            opacity: isRecording ? 0.3 + (volume / 200) : 0,
+                            transform: `scale(${1 + (volume / 500)})`
+                        }}
+                    ></div>
+
+                    {/* Indicador de volumen lateral/ondas */}
+                    {isRecording && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-900 overflow-hidden flex items-end">
+                            <div
+                                className="h-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)] transition-all duration-100 ease-out"
+                                style={{ width: `${volume}%` }}
+                            ></div>
+                        </div>
+                    )}
+
                     <button
                         onClick={onToggleRecord}
                         className={clsx(
@@ -64,6 +87,9 @@ export const AudioInputArea: React.FC<AudioInputAreaProps> = ({
                                 ? "bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.4)]"
                                 : "bg-zinc-800 hover:bg-zinc-700"
                         )}
+                        style={{
+                            transform: isRecording ? `scale(${1 + (volume / 1000)})` : 'scale(1)'
+                        }}
                     >
                         <div className={clsx("transition-transform duration-300", isRecording ? "scale-90" : "group-hover:scale-110")}>
                             {isRecording ? (
@@ -73,6 +99,14 @@ export const AudioInputArea: React.FC<AudioInputAreaProps> = ({
                             )}
                         </div>
                     </button>
+
+                    {isRecording && (
+                        <div className="absolute top-4 right-6 flex items-center gap-2">
+                            <span className="text-[10px] font-black tabular-nums text-red-500/80 tracking-tighter">
+                                {volume} %
+                            </span>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

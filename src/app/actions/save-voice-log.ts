@@ -12,6 +12,11 @@ const LogSchema = z.object({
 });
 
 export async function saveVoiceLogAction(input: z.infer<typeof LogSchema>) {
+    console.log('\n--- 🗣️ NUEVA TRANSCRIPCIÓN RECIBIDA EN EL SERVIDOR ---');
+    console.log(`[Texto]: ${input.transcript}`);
+    console.log(`[Duración]: ${input.duration}s`);
+    console.log('-----------------------------------------------------\n');
+
     // 1. Validar inputs
     const result = LogSchema.safeParse(input);
     if (!result.success) {
