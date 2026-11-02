@@ -1,0 +1,80 @@
+name: Compilar APK y Subir a Supabase
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+    paths:
+      - 'android/**'
+      - 'capacitor.config.ts'
+      - 'src/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch: # Permite compilar manualmente con un clic en GitHub
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Descargar Repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Node.js (v22)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: 3. Instalar Dependencias
+        run: npm install --legacy-peer-deps
+
+      - name: 4. Sincronizar Capacitor
+        run: npx cap sync android
+
+      - name: 5. Configurar JDK Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: 6. Configurar Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: 7. Compilar APK (Debug)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: 8. Guardar APK como Artefacto en GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-detector-de-voz-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: 9. Subir APK a Supabase Storage
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != ''
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          echo "Subiendo APK a Supabase Storage..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${SUPABASE_URL}/storage/v1/object/apks/app-detector-de-voz.apk" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "x-upsert: true" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary "@android/app/build/outputs/apk/debug/app-debug.apk")
+          
+          HTTP_BODY=$(echo "$RESPONSE" | sed '$d')
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          
+          echo "HTTP Code: $HTTP_CODE"
+          echo "Response: $HTTP_BODY"
+          
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ APK subido exitosamente a Supabase Storage."
+          else
+            echo "❌ Error al subir APK a Supabase Storage."
+            exit 1
+          fi
