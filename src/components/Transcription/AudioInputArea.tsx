@@ -1,12 +1,15 @@
 import React from 'react';
-import { Upload, Mic, CheckCircle2 } from 'lucide-react';
+import { Upload, Mic, CheckCircle2, Volume2, Square } from 'lucide-react';
 import clsx from 'clsx';
 
 interface AudioInputAreaProps {
     method: 'upload' | 'record';
     selectedFile: File | null;
     isRecording: boolean;
-    volume?: number; // Nueva prop para métricas
+    volume?: number;
+    isSpeaking?: boolean;
+    silenceProgress?: number;
+    autoStopEnabled?: boolean;
     onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onToggleRecord: () => void;
 }
@@ -16,6 +19,9 @@ export const AudioInputArea: React.FC<AudioInputAreaProps> = ({
     selectedFile,
     isRecording,
     volume = 0,
+    isSpeaking = false,
+    silenceProgress = 0,
+    autoStopEnabled = true,
     onFileSelect,
     onToggleRecord
 }) => {
@@ -56,55 +62,94 @@ export const AudioInputArea: React.FC<AudioInputAreaProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="h-48 flex items-center justify-center bg-[#0a0a0a] rounded-3xl border border-zinc-800 relative overflow-hidden animate-fadeIn transition-colors duration-500"
-                    style={{
-                        borderColor: isRecording ? `rgba(239, 68, 68, ${0.1 + (volume / 200)})` : undefined,
-                        boxShadow: isRecording ? `inset 0 0 ${10 + (volume / 4)}px rgba(239, 68, 68, 0.05)` : undefined
-                    }}
+                <div
+                    className={clsx(
+                        "h-48 flex flex-col items-center justify-center bg-[#0a0a0a] rounded-3xl border relative overflow-hidden animate-fadeIn transition-all duration-300",
+                        isRecording
+                            ? isSpeaking
+                                ? "border-cyan-500/40 shadow-[inset_0_0_25px_rgba(34,211,238,0.1)]"
+                                : "border-red-500/30 shadow-[inset_0_0_25px_rgba(239,68,68,0.08)]"
+                            : "border-zinc-800 hover:border-zinc-700"
+                    )}
                 >
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-500/5 to-transparent opacity-0 transition-opacity duration-300"
+                    {/* Efecto de pulso reactivo al volumen */}
+                    <div
+                        className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] transition-opacity duration-150 pointer-events-none"
                         style={{
-                            opacity: isRecording ? 0.3 + (volume / 200) : 0,
-                            transform: `scale(${1 + (volume / 500)})`
+                            background: isSpeaking
+                                ? 'radial-gradient(circle, rgba(34,211,238,0.15) 0%, transparent 70%)'
+                                : 'radial-gradient(circle, rgba(239,68,68,0.1) 0%, transparent 70%)',
+                            opacity: isRecording ? 0.3 + (volume / 150) : 0,
+                            transform: `scale(${1 + (volume / 400)})`
                         }}
                     ></div>
 
-                    {/* Indicador de volumen lateral/ondas */}
+                    {/* Botón Central de Micrófono */}
+                    <button
+                        type="button"
+                        onClick={onToggleRecord}
+                        className={clsx(
+                            "relative z-10 w-20 h-20 rounded-2xl flex items-center justify-center transition-all duration-300 group shadow-lg active:scale-95",
+                            isRecording
+                                ? isSpeaking
+                                    ? "bg-cyan-500 text-black shadow-[0_0_35px_rgba(34,211,238,0.5)] scale-105"
+                                    : "bg-red-500 text-white shadow-[0_0_30px_rgba(239,68,68,0.5)]"
+                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
+                        )}
+                        aria-label={isRecording ? "Detener grabación" : "Iniciar grabación"}
+                    >
+                        {isRecording ? (
+                            <Square size={22} fill="currentColor" className="animate-pulse" />
+                        ) : (
+                            <Mic size={26} className="group-hover:scale-110 transition-transform" />
+                        )}
+                    </button>
+
+                    {/* Estado descriptivo debajo del botón */}
+                    <div className="relative z-10 mt-3 text-center">
+                        <p className="text-xs font-bold tracking-wider uppercase">
+                            {isRecording ? (
+                                isSpeaking ? (
+                                    <span className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]">
+                                        Detectando voz...
+                                    </span>
+                                ) : autoStopEnabled ? (
+                                    <span className="text-amber-400">
+                                        Silencio... se enviará solo
+                                    </span>
+                                ) : (
+                                    <span className="text-red-400">
+                                        Grabando (modo manual)
+                                    </span>
+                                )
+                            ) : (
+                                <span className="text-zinc-500">
+                                    Haz clic para hablar
+                                </span>
+                            )}
+                        </p>
+                    </div>
+
+                    {/* Indicador de volumen lateral / ondas */}
                     {isRecording && (
-                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-900 overflow-hidden flex items-end">
+                        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-zinc-900 overflow-hidden">
                             <div
-                                className="h-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)] transition-all duration-100 ease-out"
-                                style={{ width: `${volume}%` }}
+                                className={clsx(
+                                    "h-full transition-all duration-100 ease-out",
+                                    isSpeaking
+                                        ? "bg-cyan-400 shadow-[0_0_12px_#22d3ee]"
+                                        : "bg-red-500 shadow-[0_0_10px_#ef4444]"
+                                )}
+                                style={{ width: `${Math.max(4, volume)}%` }}
                             ></div>
                         </div>
                     )}
 
-                    <button
-                        onClick={onToggleRecord}
-                        className={clsx(
-                            "relative z-10 w-20 h-20 rounded-2xl flex items-center justify-center transition-all duration-300 group",
-                            isRecording
-                                ? "bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.4)]"
-                                : "bg-zinc-800 hover:bg-zinc-700"
-                        )}
-                        style={{
-                            transform: isRecording ? `scale(${1 + (volume / 1000)})` : 'scale(1)'
-                        }}
-                    >
-                        <div className={clsx("transition-transform duration-300", isRecording ? "scale-90" : "group-hover:scale-110")}>
-                            {isRecording ? (
-                                <div className="w-6 h-6 bg-white rounded-sm animate-pulse"></div>
-                            ) : (
-                                <Mic className="text-zinc-400 group-hover:text-white" size={24} />
-                            )}
-                        </div>
-                    </button>
-
+                    {/* Métrica de decibelios / volumen en la esquina */}
                     {isRecording && (
-                        <div className="absolute top-4 right-6 flex items-center gap-2">
-                            <span className="text-[10px] font-black tabular-nums text-red-500/80 tracking-tighter">
-                                {volume} %
-                            </span>
+                        <div className="absolute top-3 right-4 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/60 border border-zinc-800 text-[10px] font-mono text-zinc-400 tabular-nums">
+                            <Volume2 size={12} className={isSpeaking ? "text-cyan-400 animate-pulse" : "text-zinc-600"} />
+                            <span>{volume}% dB</span>
                         </div>
                     )}
                 </div>
