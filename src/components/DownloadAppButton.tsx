@@ -1,46 +1,65 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Smartphone, Download, ShieldCheck, X, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Smartphone, Download, ShieldCheck, X, Sparkles, AlertCircle } from 'lucide-react';
 
 interface DownloadAppButtonProps {
     className?: string;
 }
 
+// URL pública permanente requerida en Supabase Storage
+const APK_DOWNLOAD_URL = 'https://dxlrsterbyjgmidyhzrs.supabase.co/storage/v1/object/public/apks/app-detector-de-voz.apk';
+
 export const DownloadAppButton: React.FC<DownloadAppButtonProps> = ({ className = '' }) => {
     const [showInstructions, setShowInstructions] = useState(false);
+    const [isAndroidDevice, setIsAndroidDevice] = useState(false);
 
-    // URL pública del APK en Supabase Storage
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const defaultApkUrl = supabaseUrl
-        ? `${supabaseUrl}/storage/v1/object/public/apks/app-detector-de-voz.apk`
-        : 'https://app-detector-de-voz.vercel.app/app-detector-de-voz.apk';
-
-    const apkUrl = process.env.NEXT_PUBLIC_APK_DOWNLOAD_URL || defaultApkUrl;
+    // Detectar si el usuario está navegando desde un dispositivo Android
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const ua = navigator.userAgent || '';
+            setIsAndroidDevice(/android/i.test(ua));
+        }
+    }, []);
 
     return (
         <>
-            <div className={`flex flex-col sm:flex-row items-center justify-center gap-3 ${className}`}>
-                <a
-                    href={apkUrl}
-                    download="app-detector-de-voz.apk"
-                    className="group relative inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-xs md:text-sm font-bold tracking-wider uppercase text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 hover:border-cyan-400 hover:bg-cyan-900/40 hover:text-white transition-all duration-300 shadow-[0_0_15px_rgba(34,211,238,0.15)] hover:shadow-[0_0_25px_rgba(34,211,238,0.35)] backdrop-blur-md active:scale-95"
-                >
-                    <Smartphone className="w-4 h-4 text-cyan-400 group-hover:animate-bounce" />
-                    <span>Descargar App (.APK)</span>
-                    <Download className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-                    <span className="absolute -top-2 -right-2 px-1.5 py-0.5 rounded-full text-[9px] bg-cyan-500 text-black font-extrabold uppercase tracking-tighter">
-                        Android
-                    </span>
-                </a>
+            <div className={`flex flex-col items-center justify-center gap-2.5 ${className}`}>
+                {/* Banner contextual si se detecta Android */}
+                {isAndroidDevice && (
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-semibold animate-pulse">
+                        <Smartphone className="w-3.5 h-3.5" />
+                        <span>Dispositivo Android detectado</span>
+                    </div>
+                )}
 
-                <button
-                    type="button"
-                    onClick={() => setShowInstructions(true)}
-                    className="text-[11px] text-cyan-400/80 hover:text-cyan-300 underline underline-offset-4 transition-colors"
-                >
-                    ¿Cómo instalar en mi móvil?
-                </button>
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <a
+                        href={APK_DOWNLOAD_URL}
+                        download="app-detector-de-voz.apk"
+                        className="group relative inline-flex items-center gap-2.5 px-6 py-3 rounded-xl text-xs md:text-sm font-black tracking-wider uppercase text-cyan-200 bg-cyan-950/50 border border-cyan-500/50 hover:border-cyan-300 hover:bg-cyan-900/60 hover:text-white transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.2)] hover:shadow-[0_0_30px_rgba(34,211,238,0.45)] backdrop-blur-md active:scale-95"
+                    >
+                        <Smartphone className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                        <span>Descargar App (.APK)</span>
+                        <Download className="w-4 h-4 text-cyan-300 opacity-80 group-hover:opacity-100 transition-opacity" />
+                        <span className="absolute -top-2.5 -right-2 px-2 py-0.5 rounded-full text-[9px] bg-gradient-to-r from-cyan-400 to-cyan-500 text-black font-extrabold uppercase tracking-tighter shadow-sm">
+                            Android
+                        </span>
+                    </a>
+
+                    <button
+                        type="button"
+                        onClick={() => setShowInstructions(true)}
+                        className="inline-flex items-center gap-1.5 text-[11px] text-cyan-400/90 hover:text-cyan-200 underline underline-offset-4 transition-colors"
+                    >
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>¿Cómo instalar? (Permitir fuentes desconocidas)</span>
+                    </button>
+                </div>
+
+                <p className="text-[10px] text-zinc-500 tracking-wide">
+                    Requiere activar <span className="text-zinc-400 font-medium">&quot;Permitir fuentes desconocidas&quot;</span> en ajustes de Android
+                </p>
             </div>
 
             {/* Modal de Instrucciones de Instalación */}
@@ -65,7 +84,7 @@ export const DownloadAppButton: React.FC<DownloadAppButtonProps> = ({ className 
                                     Instalación del APK en Android
                                 </h3>
                                 <p className="text-xs text-neutral-400">
-                                    Guía rápida paso a paso
+                                    Guía rápida de instalación manual
                                 </p>
                             </div>
                         </div>
@@ -76,7 +95,7 @@ export const DownloadAppButton: React.FC<DownloadAppButtonProps> = ({ className 
                                     1
                                 </span>
                                 <span>
-                                    Haz clic en el botón <strong>Descargar App (.APK)</strong> y guarda el archivo en tu dispositivo.
+                                    Pulsa <strong>Descargar App (.APK)</strong> para guardar el archivo en tu dispositivo.
                                 </span>
                             </li>
                             <li className="flex items-start gap-2.5">
@@ -84,7 +103,7 @@ export const DownloadAppButton: React.FC<DownloadAppButtonProps> = ({ className 
                                     2
                                 </span>
                                 <span>
-                                    Abre la notificación de descarga o busca el archivo en tu carpeta <em>Descargas</em>.
+                                    Abre la notificación de descarga o busca <code>app-detector-de-voz.apk</code> en tu carpeta de <em>Descargas</em>.
                                 </span>
                             </li>
                             <li className="flex items-start gap-2.5">
@@ -92,7 +111,7 @@ export const DownloadAppButton: React.FC<DownloadAppButtonProps> = ({ className 
                                     3
                                 </span>
                                 <span>
-                                    Si Android lo solicita, activa la casilla <strong>&quot;Permitir instalar aplicaciones de fuentes desconocidas&quot;</strong> para tu navegador.
+                                    <strong>Importante:</strong> Si el sistema avisa sobre fuentes externas, entra a Ajustes y activa <strong>&quot;Permitir instalar aplicaciones de fuentes desconocidas&quot;</strong> para tu navegador o gestor de archivos.
                                 </span>
                             </li>
                             <li className="flex items-start gap-2.5">
@@ -100,14 +119,14 @@ export const DownloadAppButton: React.FC<DownloadAppButtonProps> = ({ className 
                                     4
                                 </span>
                                 <span>
-                                    Pulsa <strong>Instalar</strong> y luego concede permisos de <strong>Micrófono</strong> para activar la transcripción y detección de audio.
+                                    Pulsa <strong>Instalar</strong> y concede los permisos de <strong>Micrófono</strong> para que el detector capture audio en tiempo real.
                                 </span>
                             </li>
                         </ol>
 
                         <div className="mt-6 pt-4 border-t border-neutral-800 flex justify-between items-center">
                             <span className="flex items-center gap-1.5 text-[10px] text-cyan-400/90 font-medium">
-                                <Sparkles className="w-3.5 h-3.5" /> Desarrollado con Capacitor Shell
+                                <Sparkles className="w-3.5 h-3.5" /> Arquitectura Capacitor Shell
                             </span>
                             <button
                                 type="button"

@@ -18,10 +18,10 @@ jobs:
       - name: 1. Descargar Repositorio
         uses: actions/checkout@v4
 
-      - name: 2. Configurar Node.js (v20)
+      - name: 2. Configurar Node.js (v22)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: 3. Instalar Dependencias
