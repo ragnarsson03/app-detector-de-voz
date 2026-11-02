@@ -11,21 +11,20 @@ import { DownloadAppButton } from '@/components/DownloadAppButton';
 
 export default function TranscriptionManager() {
     // --- ESTADOS LOCALES ---
-    const [method, setMethod] = useState<'upload' | 'record'>('record'); // Por defecto en Grabar Voz para inmediatez
+    const [method, setMethod] = useState<'upload' | 'record'>('record');
     const [result, setResult] = useState("");
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isUploadBusy, setIsUploadBusy] = useState(false);
 
     /**
-     * Centraliza el éxito de cualquier método de transcripción.
+     * Centraliza el resultado de la transcripción
      */
     const finalizeTranscription = (text: string) => {
-        console.log('[Frontend] Transcripción finalizada:', text ? 'Texto recibido' : 'Vacío');
         setResult(text);
         setIsUploadBusy(false);
     };
 
-    // --- HOOKS DE LÓGICA MODULARES ---
+    // --- HOOK DE GRABACIÓN SIMPLIFICADO ---
     const {
         isRecording,
         isProcessing: isRecorderProcessing,
@@ -34,20 +33,14 @@ export default function TranscriptionManager() {
         message: recorderMessage,
         progress: recorderProgress,
         volume: recorderVolume,
-        isSpeaking,
-        silenceProgress,
-        autoStopEnabled,
-        setAutoStopEnabled,
         transcriptionTime: recorderTime
     } = useAudioRecorder({
-        autoStopOnSilence: true,
-        silenceThreshold: 12,
-        silenceDurationMs: 1800,
         onAutoTranscribed: (text) => {
             finalizeTranscription(text);
         }
     });
 
+    // --- HOOK DE SUBIDA DE ARCHIVO ---
     const {
         uploadFile,
         statusMessage: uploaderMessage,
@@ -63,7 +56,7 @@ export default function TranscriptionManager() {
     const statusMessage = method === 'record' ? recorderMessage : uploaderMessage;
     const activeTime = method === 'record' ? recorderTime : uploaderTime;
 
-    // --- MANEJADORES DE EVENTOS ---
+    // --- ACCIONES ---
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files?.[0]) {
             setSelectedFile(e.target.files[0]);
@@ -72,11 +65,11 @@ export default function TranscriptionManager() {
     };
 
     /**
-     * Alterna la grabación (Iniciar / Detener y procesar en tiempo real)
+     * Alterna la grabación: Iniciar o Detener y Enviar
      */
     const handleToggleRecord = async () => {
         if (isRecording) {
-            // Detiene de inmediato y envía a Groq Whisper Turbo sin pasos intermedios
+            // Usuario decide cuándo terminar y enviar
             await stopAndTranscribe();
         } else {
             setResult("");
@@ -85,7 +78,7 @@ export default function TranscriptionManager() {
     };
 
     /**
-     * Maneja la subida en modo 'upload'
+     * Procesa archivo en modo 'upload'
      */
     const handleUploadTranscribe = async () => {
         if (isSystemBusy || !selectedFile) return;
@@ -128,7 +121,7 @@ export default function TranscriptionManager() {
             <div className="bg-[#050505] border border-zinc-800 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col md:flex-row min-h-[550px] relative overflow-hidden">
                 <div className="absolute top-10 left-0 w-1 h-12 bg-cyan-400 rounded-r-full shadow-[0_0_15px_#22d3ee]"></div>
 
-                {/* Columna Izquierda: Entrada y Controles Modulares */}
+                {/* Columna Izquierda: Entrada y Controles */}
                 <div className="w-full md:w-2/5 p-6 md:p-10 border-b md:border-b-0 md:border-r border-zinc-900 bg-[#050505] flex flex-col justify-between relative">
                     <div className="flex items-center gap-3 mb-6 md:mb-10 pl-4">
                         <div className="h-1.5 w-1.5 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee]"></div>
@@ -143,23 +136,16 @@ export default function TranscriptionManager() {
                             selectedFile={selectedFile}
                             isRecording={isRecording}
                             volume={recorderVolume}
-                            isSpeaking={isSpeaking}
-                            silenceProgress={silenceProgress}
-                            autoStopEnabled={autoStopEnabled}
                             onFileSelect={handleFileSelect}
                             onToggleRecord={handleToggleRecord}
                         />
 
-                        {/* Panel Modular de Acciones y Progreso */}
+                        {/* Panel de Controles Simplificado */}
                         <div className="pt-4 md:pt-6">
                             <TranscriptionControls
                                 method={method}
                                 isSystemBusy={isSystemBusy}
                                 isRecording={isRecording}
-                                isSpeaking={isSpeaking}
-                                silenceProgress={silenceProgress}
-                                autoStopEnabled={autoStopEnabled}
-                                setAutoStopEnabled={setAutoStopEnabled}
                                 selectedFile={selectedFile}
                                 statusMessage={statusMessage}
                                 progress={progress}
@@ -173,7 +159,7 @@ export default function TranscriptionManager() {
                     </div>
                 </div>
 
-                {/* Columna Derecha: Output y Resultados */}
+                {/* Columna Derecha: Resultado */}
                 <div className="w-full md:w-3/5 p-6 md:p-10 flex flex-col bg-[#050505] relative">
                     <TranscriptionDisplay
                         text={result}
